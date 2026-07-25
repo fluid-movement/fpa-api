@@ -1,0 +1,4 @@
+allowBuilds:
+  # tsx depends on esbuild, whose postinstall links the platform-specific
+  # binary. Without this, `pnpm install` fails with ERR_PNPM_IGNORED_BUILDS.
+  esbuild: true

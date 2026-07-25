@@ -1,0 +1,2381 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FPA Results API",
+    "version": "0.1.0",
+    "description": "Read-only API over the freestyle frisbee judging, results and rankings services.\n\nUpstream is five independent microservices, each with its own store and no shared query\nlayer. This API fetches all of them, resolves duplicate player identities, normalizes\ninconsistent division names, and joins ranking points back to the events that produced\nthem — then serves the result from an in-memory index.\n\n**Freshness.** Data is refreshed on a tiered schedule rather than per request, so responses\ncan be up to an hour behind upstream. `GET /health` reports exactly how stale the data is.\n\n**Data quality.** Upstream enforces no referential integrity. Records that reference a\nmissing player or event are kept and flagged (`unknown: true` on a team member, warnings\non `/health`) rather than dropped, so nothing disappears silently."
+  },
+  "tags": [
+    {
+      "name": "Events",
+      "description": "Events and their results"
+    },
+    {
+      "name": "Players",
+      "description": "Player directory and career profiles"
+    },
+    {
+      "name": "Rankings",
+      "description": "Season standings by accumulated tournament points"
+    },
+    {
+      "name": "Ratings",
+      "description": "Elo-style strength estimates. A different measure from rankings, with a different shape."
+    },
+    {
+      "name": "Snapshots",
+      "description": "Historical ranking and rating snapshots over time"
+    },
+    {
+      "name": "Matching",
+      "description": "Link our records to upstream records"
+    },
+    {
+      "name": "Operations",
+      "description": "Health and cache control"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Shared secret from REFRESH_TOKEN. Only used by POST /refresh."
+      }
+    },
+    "schemas": {
+      "PaginatedEvents": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventSummary"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Total matching items, before pagination"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ]
+      },
+      "EventSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "startDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "YYYY-MM-DD"
+          },
+          "endDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "YYYY-MM-DD"
+          },
+          "createdAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "fpaWebsiteId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fpaWebsiteSlug": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "divisions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Normalized divisions that have results"
+          },
+          "resultCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "startDate",
+          "endDate",
+          "createdAt",
+          "fpaWebsiteId",
+          "fpaWebsiteSlug",
+          "divisions",
+          "resultCount"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "error",
+          "status"
+        ]
+      },
+      "EventDetail": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/EventSummary"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DivisionResult"
+            }
+          }
+        },
+        "required": [
+          "event",
+          "results"
+        ]
+      },
+      "DivisionResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "eventName": {
+            "type": "string"
+          },
+          "division": {
+            "type": "string",
+            "description": "Canonical division name"
+          },
+          "divisionRaw": {
+            "type": "string",
+            "description": "Exactly as stored upstream, before normalization"
+          },
+          "createdAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "rounds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Round"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "eventId",
+          "eventName",
+          "division",
+          "divisionRaw",
+          "createdAt",
+          "rounds"
+        ]
+      },
+      "Round": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "number",
+            "description": "1 is the final, counting backwards"
+          },
+          "name": {
+            "type": "string",
+            "description": "e.g. \"Finals\", \"Semifinals\""
+          },
+          "pools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Pool"
+            }
+          }
+        },
+        "required": [
+          "number",
+          "name",
+          "pools"
+        ]
+      },
+      "Pool": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Pool letter, e.g. \"A\""
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Team"
+            },
+            "description": "Ordered by placement"
+          }
+        },
+        "required": [
+          "name",
+          "teams"
+        ]
+      },
+      "Team": {
+        "type": "object",
+        "properties": {
+          "place": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Finishing position in this pool. 1 is best. Sort and display by this."
+          },
+          "points": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Raw score as recorded, whose meaning DEPENDS ON THE RULESET the event used. Under FPA2020 scoring a higher number is better; under SimpleRanking it is a sum of judge ranks, so a LOWER number is better. The ruleset is not exposed in the results data, so points are not comparable across events — never sort or rank by this field. Use `place`."
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamMember"
+            }
+          }
+        },
+        "required": [
+          "place",
+          "points",
+          "players"
+        ]
+      },
+      "TeamMember": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "unknown": {
+            "type": "boolean",
+            "description": "True when this GUID is absent from the player directory"
+          }
+        },
+        "required": [
+          "id",
+          "fullName",
+          "unknown"
+        ]
+      },
+      "EventResults": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DivisionResult"
+            }
+          }
+        },
+        "required": [
+          "eventId",
+          "results"
+        ]
+      },
+      "PaginatedPlayers": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Player"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Total matching items, before pagination"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ]
+      },
+      "Player": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canonical player GUID, shared across all upstream services"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "3-letter country code"
+          },
+          "gender": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Withheld unless EXPOSE_PERSONAL_FIELDS is enabled"
+          },
+          "membership": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Withheld unless EXPOSE_PERSONAL_FIELDS is enabled"
+          },
+          "fpaWebsiteId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id of this player on the legacy FPA website"
+          },
+          "aliasIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Duplicate GUIDs that resolve to this player"
+          },
+          "createdAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lastActive": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "firstName",
+          "lastName",
+          "fullName",
+          "country",
+          "gender",
+          "membership",
+          "fpaWebsiteId",
+          "aliasIds",
+          "createdAt",
+          "lastActive"
+        ]
+      },
+      "PlayerProfile": {
+        "type": "object",
+        "properties": {
+          "player": {
+            "$ref": "#/components/schemas/Player"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/PlayerStats"
+          },
+          "rankings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayerRanking"
+            },
+            "description": "Standings in points-based ranking series. Empty if unranked."
+          },
+          "ratings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayerRating"
+            },
+            "description": "Standings in Elo-style rating series. Empty if unrated."
+          },
+          "placements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayerPlacement"
+            },
+            "description": "Most recent first"
+          }
+        },
+        "required": [
+          "player",
+          "stats",
+          "rankings",
+          "ratings",
+          "placements"
+        ]
+      },
+      "PlayerStats": {
+        "type": "object",
+        "properties": {
+          "eventCount": {
+            "type": "number"
+          },
+          "placementCount": {
+            "type": "number"
+          },
+          "wins": {
+            "type": "number",
+            "description": "First places across all rounds and pools"
+          },
+          "podiums": {
+            "type": "number"
+          },
+          "firstEventDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastEventDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "divisions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "eventCount",
+          "placementCount",
+          "wins",
+          "podiums",
+          "firstEventDate",
+          "lastEventDate",
+          "divisions"
+        ]
+      },
+      "PlayerRanking": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string"
+          },
+          "division": {
+            "type": "string"
+          },
+          "rank": {
+            "type": "number"
+          },
+          "points": {
+            "type": "number"
+          },
+          "resultsCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "series",
+          "division",
+          "rank",
+          "points",
+          "resultsCount"
+        ]
+      },
+      "PlayerRating": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string"
+          },
+          "division": {
+            "type": "string"
+          },
+          "rank": {
+            "type": "number"
+          },
+          "rating": {
+            "type": "number"
+          },
+          "matchCount": {
+            "type": "number"
+          },
+          "peakRating": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "peakRatingDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "series",
+          "division",
+          "rank",
+          "rating",
+          "matchCount",
+          "peakRating",
+          "peakRatingDate"
+        ]
+      },
+      "PlayerPlacement": {
+        "type": "object",
+        "properties": {
+          "resultId": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "eventName": {
+            "type": "string"
+          },
+          "eventDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "division": {
+            "type": "string"
+          },
+          "round": {
+            "type": "number"
+          },
+          "roundName": {
+            "type": "string"
+          },
+          "pool": {
+            "type": "string"
+          },
+          "place": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "points": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "teammates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamMember"
+            }
+          }
+        },
+        "required": [
+          "resultId",
+          "eventId",
+          "eventName",
+          "eventDate",
+          "division",
+          "round",
+          "roundName",
+          "pool",
+          "place",
+          "points",
+          "teammates"
+        ]
+      },
+      "RankingSeriesList": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "series": {
+                  "type": "string"
+                },
+                "division": {
+                  "type": "string"
+                },
+                "playerCount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "series",
+                "division",
+                "playerCount"
+              ]
+            }
+          }
+        },
+        "required": [
+          "series"
+        ]
+      },
+      "PaginatedRankings": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string"
+          },
+          "division": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RankingEntry"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "series",
+          "division",
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ]
+      },
+      "RankingEntry": {
+        "type": "object",
+        "properties": {
+          "rank": {
+            "type": "number"
+          },
+          "playerId": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "points": {
+            "type": "number"
+          },
+          "resultsCount": {
+            "type": "number"
+          },
+          "breakdown": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RankingBreakdownEntry"
+            },
+            "description": "Which events produced these points, highest first"
+          }
+        },
+        "required": [
+          "rank",
+          "playerId",
+          "fullName",
+          "points",
+          "resultsCount",
+          "breakdown"
+        ]
+      },
+      "RankingBreakdownEntry": {
+        "type": "object",
+        "properties": {
+          "resultId": {
+            "type": "string"
+          },
+          "points": {
+            "type": "number"
+          },
+          "eventId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "eventName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "division": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "resultId",
+          "points",
+          "eventId",
+          "eventName",
+          "division"
+        ]
+      },
+      "RatingSeriesList": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "series": {
+                  "type": "string"
+                },
+                "division": {
+                  "type": "string"
+                },
+                "playerCount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "series",
+                "division",
+                "playerCount"
+              ]
+            }
+          }
+        },
+        "required": [
+          "series"
+        ]
+      },
+      "PaginatedRatings": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string"
+          },
+          "division": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RatingEntry"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "series",
+          "division",
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ]
+      },
+      "RatingEntry": {
+        "type": "object",
+        "properties": {
+          "rank": {
+            "type": "number",
+            "description": "Positional — ratings carry no stored rank"
+          },
+          "playerId": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "number",
+            "description": "Elo-style strength estimate"
+          },
+          "matchCount": {
+            "type": "number",
+            "description": "Head-to-head comparisons behind this rating; low counts are unreliable"
+          },
+          "peakRating": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "peakRatingDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "YYYY-MM-DD"
+          },
+          "peakRank": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "peakRankDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "YYYY-MM-DD"
+          }
+        },
+        "required": [
+          "rank",
+          "playerId",
+          "fullName",
+          "rating",
+          "matchCount",
+          "peakRating",
+          "peakRatingDate",
+          "peakRank",
+          "peakRankDate"
+        ]
+      },
+      "SnapshotList": {
+        "type": "object",
+        "properties": {
+          "snapshots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SnapshotRef"
+            }
+          }
+        },
+        "required": [
+          "snapshots"
+        ]
+      },
+      "SnapshotRef": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ranking",
+              "rating"
+            ]
+          },
+          "division": {
+            "type": "string"
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "YYYY-MM-DD"
+          },
+          "createdAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "division",
+          "date",
+          "createdAt"
+        ]
+      },
+      "SnapshotDetail": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "$ref": "#/components/schemas/SnapshotRef"
+          },
+          "rankings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RankingSeries"
+            }
+          },
+          "ratings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RatingSeries"
+            }
+          }
+        },
+        "required": [
+          "snapshot",
+          "rankings",
+          "ratings"
+        ]
+      },
+      "RankingSeries": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ranking"
+            ]
+          },
+          "division": {
+            "type": "string"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RankingEntry"
+            }
+          }
+        },
+        "required": [
+          "series",
+          "type",
+          "division",
+          "entries"
+        ]
+      },
+      "RatingSeries": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "rating"
+            ]
+          },
+          "division": {
+            "type": "string"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RatingEntry"
+            }
+          }
+        },
+        "required": [
+          "series",
+          "type",
+          "division",
+          "entries"
+        ]
+      },
+      "EventMatches": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "startDate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "startDate"
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "event": {
+                  "$ref": "#/components/schemas/EventSummary"
+                },
+                "score": {
+                  "type": "number",
+                  "description": "Combined score, 0 to 1"
+                },
+                "nameScore": {
+                  "type": "number"
+                },
+                "dateScore": {
+                  "type": "number"
+                },
+                "confident": {
+                  "type": "boolean",
+                  "description": "Near-certain match, but still requires confirmation"
+                }
+              },
+              "required": [
+                "event",
+                "score",
+                "nameScore",
+                "dateScore",
+                "confident"
+              ]
+            }
+          }
+        },
+        "required": [
+          "query",
+          "candidates"
+        ]
+      },
+      "PlayerMatches": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "player": {
+                  "$ref": "#/components/schemas/Player"
+                },
+                "score": {
+                  "type": "number"
+                },
+                "placementCount": {
+                  "type": "number",
+                  "description": "Use as a tiebreaker: an active player is the likelier match"
+                },
+                "confident": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "player",
+                "score",
+                "placementCount",
+                "confident"
+              ]
+            }
+          }
+        },
+        "required": [
+          "query",
+          "candidates"
+        ]
+      },
+      "Status": {
+        "type": "object",
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "description": "False until the first successful load"
+          },
+          "builtAt": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "When the in-memory index was built"
+          },
+          "lastFullRefreshAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lastRefreshDurationMs": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "refreshing": {
+            "type": "boolean"
+          },
+          "origin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "network",
+              "snapshot",
+              null
+            ],
+            "description": "Where the current data came from"
+          },
+          "sources": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "description": "Per-upstream-service health"
+          },
+          "counts": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "players": {
+                "type": "number"
+              },
+              "events": {
+                "type": "number"
+              },
+              "results": {
+                "type": "number"
+              },
+              "rankingSeries": {
+                "type": "number"
+              },
+              "snapshots": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "players",
+              "events",
+              "results",
+              "rankingSeries",
+              "snapshots"
+            ]
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Non-fatal data problems found while normalizing"
+          }
+        },
+        "required": [
+          "ready",
+          "builtAt",
+          "lastFullRefreshAt",
+          "lastRefreshDurationMs",
+          "refreshing",
+          "origin",
+          "sources",
+          "counts",
+          "warnings"
+        ]
+      },
+      "SourceStatus": {
+        "type": "object",
+        "properties": {
+          "lastSuccessAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lastErrorAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "lastSuccessAt",
+          "lastErrorAt",
+          "lastError"
+        ]
+      },
+      "RefreshResult": {
+        "type": "object",
+        "properties": {
+          "refreshed": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "required": [
+          "refreshed",
+          "status"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/events": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "List events",
+        "description": "Every event known to the upstream event-summary service, newest first. Events without a start date sort last rather than being omitted.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50,
+              "description": "Maximum items to return",
+              "example": 50
+            },
+            "required": false,
+            "description": "Maximum items to return",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0,
+              "description": "Items to skip",
+              "example": 0
+            },
+            "required": false,
+            "description": "Items to skip",
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Case-insensitive event name search"
+            },
+            "required": false,
+            "description": "Case-insensitive event name search",
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "example": "2026-07-25",
+              "description": "Only events starting on or after this date"
+            },
+            "required": false,
+            "description": "Only events starting on or after this date",
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "example": "2026-07-25",
+              "description": "Only events starting on or before this date"
+            },
+            "required": false,
+            "description": "Only events starting on or before this date",
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Only events with results in this division",
+              "example": "Open Pairs"
+            },
+            "required": false,
+            "description": "Only events with results in this division",
+            "name": "division",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "description": "Restrict to events that have results"
+            },
+            "required": false,
+            "description": "Restrict to events that have results",
+            "name": "hasResults",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedEvents"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{eventId}": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Get an event with its results",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Upstream event GUID",
+              "example": "aee447a2-0721-4ba7-b4ca-f362889742c8"
+            },
+            "required": true,
+            "description": "Upstream event GUID",
+            "name": "eventId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The event and every division result recorded for it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{eventId}/results": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Get only the results for an event",
+        "description": "Use this when rendering a results table and the event metadata is already known.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Upstream event GUID",
+              "example": "aee447a2-0721-4ba7-b4ca-f362889742c8"
+            },
+            "required": true,
+            "description": "Upstream event GUID",
+            "name": "eventId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Restrict to a single division",
+              "example": "Open Pairs"
+            },
+            "required": false,
+            "description": "Restrict to a single division",
+            "name": "division",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Results for the event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/players": {
+      "get": {
+        "tags": [
+          "Players"
+        ],
+        "summary": "List players",
+        "description": "Only canonical players are listed. Upstream stores duplicate entries for the same person linked by `aliasKey`; those are merged here and their GUIDs appear in `aliasIds`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50,
+              "description": "Maximum items to return",
+              "example": 50
+            },
+            "required": false,
+            "description": "Maximum items to return",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0,
+              "description": "Items to skip",
+              "example": 0
+            },
+            "required": false,
+            "description": "Items to skip",
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Case-insensitive player name search"
+            },
+            "required": false,
+            "description": "Case-insensitive player name search",
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 3,
+              "description": "3-letter country code",
+              "example": "ITA"
+            },
+            "required": false,
+            "description": "3-letter country code",
+            "name": "country",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "description": "Restrict to players with at least one recorded placement"
+            },
+            "required": false,
+            "description": "Restrict to players with at least one recorded placement",
+            "name": "hasResults",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of players",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedPlayers"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/players/{playerId}": {
+      "get": {
+        "tags": [
+          "Players"
+        ],
+        "summary": "Get a player profile with career metrics",
+        "description": "Returns the player, aggregate career stats, their current standing in every ranking and rating series, and every recorded placement (most recent first). An alias GUID is accepted; the response always carries the canonical id, so callers can detect the redirect and store the canonical value.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Player GUID. An alias GUID is accepted and resolves to the canonical player.",
+              "example": "efdaaa1f-0f3d-4f42-8ede-c3330a5f9255"
+            },
+            "required": true,
+            "description": "Player GUID. An alias GUID is accepted and resolves to the canonical player.",
+            "name": "playerId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The player profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rankings/series": {
+      "get": {
+        "tags": [
+          "Rankings"
+        ],
+        "summary": "List available ranking series",
+        "description": "Call this to discover valid `series` values rather than hardcoding them. Elo-style ratings are a different thing entirely — see `GET /ratings/series`.",
+        "responses": {
+          "200": {
+            "description": "Available ranking series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RankingSeriesList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rankings": {
+      "get": {
+        "tags": [
+          "Rankings"
+        ],
+        "summary": "Get the current ranking standings",
+        "description": "Cumulative tournament points. Defaults to `ranking-open`. Each entry carries a `breakdown` tying its points back to the specific events that earned them — a join the upstream services do not offer.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "example": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0,
+              "description": "Items to skip",
+              "example": 0
+            },
+            "required": false,
+            "description": "Items to skip",
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Series key, e.g. \"ranking-open\". Overrides `division`.",
+              "example": "ranking-open"
+            },
+            "required": false,
+            "description": "Series key, e.g. \"ranking-open\". Overrides `division`.",
+            "name": "series",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Short division token, e.g. \"open\" or \"women\". Defaults to \"open\".",
+              "example": "open"
+            },
+            "required": false,
+            "description": "Short division token, e.g. \"open\" or \"women\". Defaults to \"open\".",
+            "name": "division",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of ranked players",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedRankings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ratings/series": {
+      "get": {
+        "tags": [
+          "Ratings"
+        ],
+        "summary": "List available rating series",
+        "description": "Ratings are an Elo-style strength estimate derived from head-to-head outcomes. They are NOT the same as rankings: rankings accumulate tournament points over a season, ratings estimate current strength and have no points breakdown. A rating backed by a low `matchCount` is statistically weak — surface that number alongside the rating rather than the rating alone.",
+        "responses": {
+          "200": {
+            "description": "Available rating series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RatingSeriesList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ratings": {
+      "get": {
+        "tags": [
+          "Ratings"
+        ],
+        "summary": "Get the current rating standings",
+        "description": "Ratings are an Elo-style strength estimate derived from head-to-head outcomes. They are NOT the same as rankings: rankings accumulate tournament points over a season, ratings estimate current strength and have no points breakdown. A rating backed by a low `matchCount` is statistically weak — surface that number alongside the rating rather than the rating alone. Defaults to `rating-open`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "example": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0,
+              "description": "Items to skip",
+              "example": 0
+            },
+            "required": false,
+            "description": "Items to skip",
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Series key, e.g. \"rating-open\". Overrides `division`.",
+              "example": "rating-open"
+            },
+            "required": false,
+            "description": "Series key, e.g. \"rating-open\". Overrides `division`.",
+            "name": "series",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Short division token. Defaults to \"open\".",
+              "example": "open"
+            },
+            "required": false,
+            "description": "Short division token. Defaults to \"open\".",
+            "name": "division",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "description": "Exclude players with fewer than this many head-to-head matches. Most rated players have very few, so a floor of 50-100 gives a far more meaningful leaderboard.",
+              "example": 50
+            },
+            "required": false,
+            "description": "Exclude players with fewer than this many head-to-head matches. Most rated players have very few, so a floor of 50-100 gives a far more meaningful leaderboard.",
+            "name": "minMatchCount",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of rated players, strongest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedRatings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/snapshots": {
+      "get": {
+        "tags": [
+          "Snapshots"
+        ],
+        "summary": "List historical ranking and rating snapshots",
+        "description": "Rankings and ratings are published upstream as dated snapshots. This lists them newest first; snapshots flagged hidden upstream are excluded. Use these to chart a player or division over time.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ranking",
+                "rating"
+              ]
+            },
+            "required": false,
+            "name": "type",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "open"
+            },
+            "required": false,
+            "name": "division",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Available snapshots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/snapshots/{key}": {
+      "get": {
+        "tags": [
+          "Snapshots"
+        ],
+        "summary": "Get one historical snapshot",
+        "description": "Fetched from upstream on demand rather than held in memory: there are around 100 snapshots and they are read rarely, so caching them all would cost a lot of memory for little gain. Expect this to be slower than the other endpoints. A snapshot contains either rankings or ratings depending on its key; the other array is empty.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Snapshot key from GET /rankings/snapshots",
+              "example": "ranking-open_2026-6-8"
+            },
+            "required": true,
+            "description": "Snapshot key from GET /rankings/snapshots",
+            "name": "key",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The snapshot contents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/match/events": {
+      "get": {
+        "tags": [
+          "Matching"
+        ],
+        "summary": "Find upstream events that may correspond to one of ours",
+        "description": "Results are suggestions ranked by similarity, never an automatic link. fpa-events and the upstream services share no identifier, so a confident-looking match can still be the wrong year or a junior division. Always require human confirmation before storing the id.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Event name to match against",
+              "example": "German Championship 2026"
+            },
+            "required": true,
+            "description": "Event name to match against",
+            "name": "name",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "example": "2026-07-25",
+              "description": "Improves ranking accuracy when supplied"
+            },
+            "required": false,
+            "description": "Improves ranking accuracy when supplied",
+            "name": "startDate",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "description": "Restrict to events with results. Defaults to true."
+            },
+            "required": false,
+            "description": "Restrict to events with results. Defaults to true.",
+            "name": "hasResults",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ranked candidate events, best first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventMatches"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/match/players": {
+      "get": {
+        "tags": [
+          "Matching"
+        ],
+        "summary": "Find upstream players that may correspond to one of our users",
+        "description": "Results are suggestions ranked by similarity, never an automatic link. fpa-events and the upstream services share no identifier, so a confident-looking match can still be the wrong year or a junior division. Always require human confirmation before storing the id. Names are especially unreliable here — several people in the directory share a name.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Player name to match against",
+              "example": "Francesco Santolin"
+            },
+            "required": true,
+            "description": "Player name to match against",
+            "name": "name",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ranked candidate players, best first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerMatches"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Data is still loading or upstream is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Service health and data freshness",
+        "description": "Reports per-source upstream health, when data was last refreshed, and any data-quality warnings. Returns 503 while the index is not yet ready, but the body is identical either way — this is the endpoint to read when something looks wrong.",
+        "responses": {
+          "200": {
+            "description": "Healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready — no data loaded yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/refresh": {
+      "post": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Force an immediate full refresh",
+        "description": "Pulls the full corpus now instead of waiting for the scheduled refresh. Intended to be called right after results are entered upstream. Requires a bearer token matching REFRESH_TOKEN; when that variable is unset the route is disabled rather than left open.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Refresh completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Refresh failed, or the endpoint is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {}
+}
