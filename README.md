@@ -46,6 +46,12 @@ curl localhost:3000/players/<playerId>            # career profile
 | `pnpm test` | Run the test suite |
 | `pnpm spec` | Regenerate `openapi.json` |
 
+## Deploying
+
+Build pack must be **Dockerfile**, not Nixpacks — Nixpacks pins pnpm 9 against this repo's pnpm 11
+lockfile and fails. Mount a volume at `/app/data`, health check `/healthz`, port `3000`. Full
+details in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
+
 ## Documentation
 
 | Document | Read it when |

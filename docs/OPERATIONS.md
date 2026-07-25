@@ -4,23 +4,43 @@ Deploying and running the service, and what to do when it misbehaves.
 
 ---
 
-## Deploying
+## Deploying to Coolify
 
 The service is a plain Node HTTP server with no database and no external state beyond one snapshot
-file. It deploys anywhere Node 22+ runs; fpa-events is hosted on Coolify, and this sits alongside it.
+file. It runs alongside fpa-events on the Hetzner VPS.
 
-```bash
-pnpm install --frozen-lockfile
-pnpm build
-pnpm start
+### Use the Dockerfile build pack, not Nixpacks
+
+Nixpacks **does not work** for this project, and the failure is not obvious from the error message.
+Nixpacks installs pnpm from nixpkgs — currently **9.15.9** — while this repo's lockfile is pnpm 11.
+Older pnpm sees `pnpm-workspace.yaml` (which carries the `allowBuilds` allowlist esbuild needs),
+assumes the repo is a workspace root, and fails with:
+
 ```
+ERROR packages field missing or empty
+```
+
+Even with a `packages:` field added, pnpm 9 cannot install a pnpm 11 lockfile under
+`--frozen-lockfile`. The [`Dockerfile`](../Dockerfile) pins the pnpm version via corepack and the
+`packageManager` field, so the build is reproducible regardless of what a build pack would pick.
+
+In Coolify: **Configuration → General → Build Pack → `Dockerfile`.**
+
+### Coolify settings
+
+| Setting | Value |
+| --- | --- |
+| Build Pack | `Dockerfile` |
+| Ports Exposes | `3000` |
+| Health Check Path | `/healthz` |
+| Persistent Storage | Volume mounted at **`/app/data`** |
 
 ### Required setup
 
-- **Node 22.12+**
-- **A writable volume for `SNAPSHOT_PATH`.** Without persistence the service still works, but every
-  restart begins with an empty index and a ~4 second cold fetch, and a restart during an upstream
-  outage serves 503s until upstream recovers. Mount a volume at `./data`.
+- **A volume at `/app/data`.** The image defaults `SNAPSHOT_PATH` to `/app/data/snapshot.json`.
+  Without persistence the service still runs, but every restart begins with an empty index and a
+  ~4 second cold fetch — and a restart during an upstream outage serves 503s until upstream
+  recovers. With the volume, a cold start during a total outage still serves the full dataset.
 - **Outbound HTTPS to `*.execute-api.us-west-2.amazonaws.com`.**
 
 ### Health checks
@@ -28,15 +48,24 @@ pnpm start
 | Probe | Endpoint | Notes |
 | --- | --- | --- |
 | Liveness | `GET /healthz` | Plain `ok`. Never touches upstream — use this for container restarts. |
-| Readiness | `GET /health` | `503` until the first successful load. Use this for load-balancer readiness. |
+| Readiness | `GET /health` | `503` until the first successful load. |
 
-Do **not** point a liveness probe at `/health`: an upstream outage during boot would then restart
-the container in a loop, which is exactly the wrong response.
+Do **not** point a liveness probe at `/health`. An upstream outage would then restart the container
+in a loop, discarding a perfectly good in-memory index each time — exactly the wrong response. The
+Dockerfile's built-in `HEALTHCHECK` already uses `/healthz`.
 
 ### Environment
 
 See [`.env.example`](../.env.example). At minimum set `REFRESH_TOKEN` (otherwise `POST /refresh` is
-disabled) and `CORS_ORIGINS` if browsers will call this directly.
+disabled) and `CORS_ORIGINS` if browsers will call this directly. `PORT` and `SNAPSHOT_PATH` are
+already set correctly by the image.
+
+### Running it anywhere else
+
+```bash
+docker build -t fpa-api .
+docker run -p 3000:3000 -v fpa-api-data:/app/data -e REFRESH_TOKEN=… fpa-api
+```
 
 ---
 
@@ -66,8 +95,8 @@ Worth alerting on:
 | Signal | Meaning |
 | --- | --- |
 | `ready: false` for more than a minute | No data at all — upstream down and no snapshot |
-| `origin: "snapshot"` persisting | Every network refresh since boot has failed |
-| `lastFullRefreshAt` older than ~2 hours | The scheduler is stuck or upstream is failing |
+| `origin: "snapshot"` persisting | Serving carried-over data; every network refresh has failed |
+| `lastFullRefreshAt` older than ~2 hours, or `null` while `ready` | The scheduler is stuck or upstream is failing |
 | A source with a recent `lastErrorAt` | That specific upstream service is unhealthy |
 | `counts.results` dropping sharply | Upstream data loss, or a normalization regression |
 

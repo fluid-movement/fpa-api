@@ -1,4 +1,9 @@
+# pnpm 11 keeps the build-script allowlist here (not in package.json).
+# tsx depends on esbuild, whose postinstall links the platform-specific binary;
+# without this, install fails with ERR_PNPM_IGNORED_BUILDS.
+#
+# NOTE: the presence of this file makes pnpm <10 treat the repo as a workspace
+# root and demand a `packages:` field. That is why the Dockerfile pins pnpm via
+# corepack rather than letting a build pack choose a version.
 allowBuilds:
-  # tsx depends on esbuild, whose postinstall links the platform-specific
-  # binary. Without this, `pnpm install` fails with ERR_PNPM_IGNORED_BUILDS.
   esbuild: true

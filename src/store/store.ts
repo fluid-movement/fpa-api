@@ -120,6 +120,7 @@ export class Store {
 	hydrate(corpus: Corpus): void {
 		this.#corpus = corpus;
 		this.#index = buildIndex(corpus);
+		this.#origin = 'snapshot';
 	}
 
 	/**
@@ -204,8 +205,17 @@ export class Store {
 			return false;
 		}
 
+		// Whether this refresh actually retrieved the core data, as opposed to
+		// carrying forward what we already had. Everything below depends on
+		// this distinction: reporting a carried-over corpus as a successful
+		// network refresh would make a total upstream outage look healthy, and
+		// silence the very alerts that exist to catch it.
+		const coreFetched = players !== null && events !== null && results !== null;
+
 		const corpus: Corpus = {
-			fetchedAt: Date.now(),
+			// Only advance fetchedAt when data really was fetched, so the
+			// snapshot on disk keeps an honest age.
+			fetchedAt: coreFetched ? Date.now() : (previous?.fetchedAt ?? Date.now()),
 			players: nextPlayers,
 			events: nextEvents,
 			results: nextResults,
@@ -218,22 +228,34 @@ export class Store {
 			const index = buildIndex(corpus);
 			this.#corpus = corpus;
 			this.#index = index;
-			this.#origin = 'network';
-			this.#lastFullRefreshAt = corpus.fetchedAt;
 			this.#lastDirectorySignature = signatureOf(directory);
 			this.#lastManifestSignature = signatureOf(manifest);
 
-			await saveSnapshot(corpus).catch((error) => {
-				console.warn(`[store] snapshot write failed: ${String(error)}`);
-			});
+			if (coreFetched) {
+				this.#origin = 'network';
+				this.#lastFullRefreshAt = corpus.fetchedAt;
+
+				await saveSnapshot(corpus).catch((error) => {
+					console.warn(`[store] snapshot write failed: ${String(error)}`);
+				});
+			} else {
+				// Serving carried-over data. Leave lastFullRefreshAt where it
+				// was so staleness stays visible, and do not rewrite the
+				// snapshot with data we did not just fetch.
+				this.#origin = 'snapshot';
+			}
 
 			this.#lastRefreshDurationMs = Date.now() - startedAt;
 			console.log(
-				`[store] refreshed in ${this.#lastRefreshDurationMs}ms — ` +
-					`${index.players.size} players, ${index.events.size} events, ` +
-					`${index.results.size} results, ${index.warnings.length} warning(s)`
+				coreFetched
+					? `[store] refreshed in ${this.#lastRefreshDurationMs}ms — ` +
+							`${index.players.size} players, ${index.events.size} events, ` +
+							`${index.results.size} results, ${index.warnings.length} warning(s)`
+					: `[store] refresh incomplete after ${this.#lastRefreshDurationMs}ms — ` +
+							`core sources unavailable, still serving data from ` +
+							`${new Date(corpus.fetchedAt).toISOString()}`
 			);
-			return true;
+			return coreFetched;
 		} catch (error) {
 			// A build failure means our normalization hit something unexpected.
 			// Keep the previous index rather than swapping in a broken one.
