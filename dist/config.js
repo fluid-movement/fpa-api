@@ -62,6 +62,12 @@ export const config = {
      * off until the upstream owner confirms they are intended to be public.
      */
     exposePersonalFields: process.env.EXPOSE_PERSONAL_FIELDS === 'true',
+    /**
+     * Events still being judged are withheld from the index, because their
+     * results are partial and change under us until the head judge locks the
+     * last pool. Set this to true to consume them anyway.
+     */
+    consumeInProgressEvents: process.env.CONSUME_IN_PROGRESS_EVENTS === 'true',
     /** CORS allowlist. Empty means same-origin/server-to-server only. */
     corsOrigins: (process.env.CORS_ORIGINS ?? '')
         .split(',')

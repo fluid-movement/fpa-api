@@ -46,6 +46,12 @@ export declare const config: {
      * off until the upstream owner confirms they are intended to be public.
      */
     readonly exposePersonalFields: boolean;
+    /**
+     * Events still being judged are withheld from the index, because their
+     * results are partial and change under us until the head judge locks the
+     * last pool. Set this to true to consume them anyway.
+     */
+    readonly consumeInProgressEvents: boolean;
     /** CORS allowlist. Empty means same-origin/server-to-server only. */
     readonly corsOrigins: string[];
 };

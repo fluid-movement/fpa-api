@@ -137,9 +137,14 @@ fits in RAM and is not ours to own.
 path would need auth, conflict handling, and a trust relationship we do not have.
 
 **No live scores yet.** The judging service holds only the currently-running event and discards
-per-judge detail afterwards. The probe infrastructure is in place (`getEventDataVersion` is a
-42-byte check) and `Index.live` already tracks it, but a live feed is a separate feature with its
-own polling profile.
+per-judge detail afterwards. We now read that event's blob, but only for its per-pool `isLocked`
+flags — an event still being judged is withheld from the index entirely, results and all, because
+its placements churn until the head judge locks the last pool. See "Pool locks are the finished
+signal" in [UPSTREAM.md](UPSTREAM.md); the escape hatch is `CONSUME_IN_PROGRESS_EVENTS`.
+
+Serving the scores themselves is still a separate feature with its own polling profile. What exists
+today is the read path (`getEventData`, version-probed so the 247 KB payload is only pulled when it
+changed) and `Index.live`.
 
 **No auto-linking.** `GET /match/*` ranks candidates and never picks one. Binding the wrong results
 to an event is worse than showing none, and only a human can tell "German Championship 2026" from

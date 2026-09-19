@@ -158,3 +158,26 @@ export interface RawEventDataVersion {
     importantVersion?: number;
     minorVersion?: number;
 }
+/**
+ * One pool inside a judging event. The head judge sets `isLocked` when that
+ * pool's scoring is final, which is the only upstream signal for "this event
+ * has finished". Presence in `getEventDirectory` is not: `showInDirectory` is
+ * cleared by a manual admin call and routinely stays true for weeks after an
+ * event ends.
+ */
+export interface RawJudgingPool {
+    isLocked?: boolean;
+}
+/**
+ * `getEventData/{key}` — ~247 KB of judge scoring, of which we read only the
+ * lock bits. The doubled `eventData.eventData` nesting is upstream's, not a
+ * typo.
+ */
+export interface RawEventDataResponse {
+    eventData?: {
+        key?: string;
+        eventData?: {
+            poolMap?: Record<string, RawJudgingPool>;
+        };
+    };
+}

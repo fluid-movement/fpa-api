@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.js';
 import type { Corpus } from './domain/index-builder.js';
 import { store } from './store/store.js';
@@ -310,5 +310,61 @@ describe('operations', () => {
 		const { status, body } = await get('/nope');
 		expect(status).toBe(404);
 		expect(body).toMatchObject({ error: 'Not found', status: 404 });
+	});
+});
+
+describe('an event that is still being judged', () => {
+	// e1 is in the judging directory with an unlocked pool, so it and its
+	// results must not be served at all — partial placements would otherwise
+	// churn under consumers until the head judge locks the last pool.
+	beforeAll(() => {
+		store.hydrate({
+			...fixture,
+			directory: {
+				eventDirectory: [{ eventKey: 'e1', eventName: 'Anzio Spring Jam 2026', modifiedAt: 1 }]
+			},
+			liveLocks: {
+				e1: { allPoolsLocked: false, poolCount: 3, unlockedCount: 1, observedAt: 0 }
+			}
+		});
+	});
+
+	afterAll(() => {
+		store.hydrate(fixture);
+	});
+
+	it('is absent from the event list', async () => {
+		const { body } = await get('/events');
+		expect(body.total).toBe(1);
+		expect(body.items.map((e: { id: string }) => e.id)).toEqual(['e2']);
+	});
+
+	it('404s on direct lookup', async () => {
+		expect((await get('/events/e1')).status).toBe(404);
+	});
+
+	it('withholds its results from the player profile', async () => {
+		const { body } = await get('/players/p1');
+		expect(body.placements).toEqual([]);
+	});
+
+	it('explains itself in the health warnings', async () => {
+		const { body } = await get('/health');
+		expect(body.warnings).toContainEqual(expect.stringContaining('is being judged'));
+	});
+
+	it('serves it again once every pool is locked', async () => {
+		store.hydrate({
+			...fixture,
+			directory: {
+				eventDirectory: [{ eventKey: 'e1', eventName: 'Anzio Spring Jam 2026', modifiedAt: 1 }]
+			},
+			liveLocks: {
+				e1: { allPoolsLocked: true, poolCount: 3, unlockedCount: 0, observedAt: 0 }
+			}
+		});
+
+		expect((await get('/events')).body.total).toBe(2);
+		expect((await get('/events/e1')).status).toBe(200);
 	});
 });

@@ -6,7 +6,9 @@ const fetchers = {
 	results: vi.fn(),
 	manifest: vi.fn(),
 	latestPoints: vi.fn(),
-	directory: vi.fn()
+	directory: vi.fn(),
+	eventDataVersion: vi.fn(),
+	eventData: vi.fn()
 };
 
 vi.mock('../upstream/sources.js', () => ({ sources: fetchers }));
@@ -34,6 +36,19 @@ const RESULTS = {
 	}
 };
 
+/** One directoried event, as `getEventDirectory` returns it. */
+const DIRECTORY = { eventDirectory: [{ eventKey: 'e1', eventName: 'Test', modifiedAt: 1 }] };
+
+/** `getEventData` shape — note the doubled `eventData` nesting is upstream's. */
+function lockedEventData(isLocked: boolean) {
+	return {
+		eventData: {
+			key: 'e1',
+			eventData: { poolMap: { 'pool|e1|Open Pairs|Finals|A': { isLocked } } }
+		}
+	};
+}
+
 function allSucceed() {
 	fetchers.players.mockResolvedValue(PLAYERS);
 	fetchers.events.mockResolvedValue(EVENTS);
@@ -41,6 +56,8 @@ function allSucceed() {
 	fetchers.manifest.mockResolvedValue({});
 	fetchers.latestPoints.mockResolvedValue({});
 	fetchers.directory.mockResolvedValue({ eventDirectory: [] });
+	fetchers.eventDataVersion.mockResolvedValue({ importantVersion: 1, minorVersion: 1 });
+	fetchers.eventData.mockResolvedValue(lockedEventData(true));
 }
 
 function allFail() {
@@ -120,5 +137,99 @@ describe('Store.refresh', () => {
 		expect(() => store.requireIndex()).toThrowError(
 			expect.objectContaining({ name: 'IndexNotReady' })
 		);
+	});
+});
+
+describe('Store judging lock state', () => {
+	it('skips the 247 KB event data fetch when the version has not moved', async () => {
+		allSucceed();
+		fetchers.directory.mockResolvedValue(DIRECTORY);
+		const store = new Store();
+
+		await store.refresh();
+		expect(fetchers.eventData).toHaveBeenCalledOnce();
+
+		await store.refresh();
+		// Version unchanged, so the second refresh probes (42 bytes) but does
+		// not re-download the blob.
+		expect(fetchers.eventData).toHaveBeenCalledOnce();
+		expect(fetchers.eventDataVersion).toHaveBeenCalledTimes(2);
+	});
+
+	it('refetches event data once the version moves', async () => {
+		allSucceed();
+		fetchers.directory.mockResolvedValue(DIRECTORY);
+		const store = new Store();
+
+		await store.refresh();
+		fetchers.eventDataVersion.mockResolvedValue({ importantVersion: 1, minorVersion: 2 });
+		await store.refresh();
+
+		expect(fetchers.eventData).toHaveBeenCalledTimes(2);
+	});
+
+	it('does not touch the judging endpoints when the directory is empty', async () => {
+		allSucceed();
+		const store = new Store();
+
+		await store.refresh();
+
+		expect(fetchers.eventDataVersion).not.toHaveBeenCalled();
+		expect(fetchers.eventData).not.toHaveBeenCalled();
+	});
+
+	it('carries the previous lock state forward when judging fails', async () => {
+		// A judging outage must not flip a finished event into "unknown" and
+		// get it withheld — that would drop its complete results from the API.
+		allSucceed();
+		fetchers.directory.mockResolvedValue(DIRECTORY);
+		const store = new Store();
+
+		await store.refresh();
+		expect(store.status.counts).toMatchObject({ events: 1, results: 1 });
+
+		fetchers.eventData.mockRejectedValue(new Error('judging down'));
+		fetchers.eventDataVersion.mockRejectedValue(new Error('judging down'));
+		expect(await store.refresh()).toBe(true);
+
+		expect(store.status.sources.judging.lastError).toContain('judging down');
+		expect(store.status.counts).toMatchObject({ events: 1, results: 1 });
+	});
+
+	it('withholds the event and its results while a pool is unlocked', async () => {
+		allSucceed();
+		fetchers.directory.mockResolvedValue(DIRECTORY);
+		fetchers.eventData.mockResolvedValue(lockedEventData(false));
+		const store = new Store();
+
+		await store.refresh();
+
+		expect(store.status.counts).toMatchObject({ events: 0, results: 0 });
+		expect(store.status.warnings).toContainEqual(
+			expect.stringContaining('is being judged')
+		);
+	});
+});
+
+describe('Store.probeDirectory', () => {
+	it('escalates to a refresh when a pool is locked, though the directory is unchanged', async () => {
+		// Locking a pool bumps the event's minorVersion but leaves
+		// getEventDirectory byte-identical, so signing the directory alone
+		// would miss an event finishing until the next hourly full refresh.
+		allSucceed();
+		fetchers.directory.mockResolvedValue(DIRECTORY);
+		fetchers.eventData.mockResolvedValue(lockedEventData(false));
+		const store = new Store();
+
+		await store.refresh();
+		expect(store.status.counts).toMatchObject({ events: 0 });
+
+		expect(await store.probeDirectory()).toBe(false);
+
+		fetchers.eventDataVersion.mockResolvedValue({ importantVersion: 1, minorVersion: 2 });
+		fetchers.eventData.mockResolvedValue(lockedEventData(true));
+
+		expect(await store.probeDirectory()).toBe(true);
+		expect(store.status.counts).toMatchObject({ events: 1, results: 1 });
 	});
 });

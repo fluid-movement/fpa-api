@@ -1,4 +1,4 @@
-import type { RawDirectoryResponse, RawEventDataVersion, RawEventsResponse, RawManifestResponse, RawPlayersResponse, RawPointsResponse, RawPointsSnapshotResponse, RawResultsResponse } from './types.js';
+import type { RawDirectoryResponse, RawEventDataResponse, RawEventDataVersion, RawEventsResponse, RawManifestResponse, RawPlayersResponse, RawPointsResponse, RawPointsSnapshotResponse, RawResultsResponse } from './types.js';
 /**
  * One function per upstream endpoint. Nothing here interprets the data — that
  * is the normalizer's job. Keeping fetching dumb means the transport layer can
@@ -25,4 +25,10 @@ export declare const sources: {
     directory: () => Promise<RawDirectoryResponse>;
     /** 42 bytes. Version probe for a live event. */
     eventDataVersion: (eventKey: string) => Promise<RawEventDataVersion>;
+    /**
+     * ~247 KB. The full judging blob for one event. Only ever fetched for
+     * events the directory is showing, and only when the version probe says it
+     * changed — we read nothing from it but the per-pool `isLocked` flags.
+     */
+    eventData: (eventKey: string) => Promise<RawEventDataResponse>;
 };

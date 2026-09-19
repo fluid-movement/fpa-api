@@ -1,9 +1,22 @@
-import { buildIndex, type Corpus } from '../domain/index-builder.js';
+import {
+	buildIndex,
+	summarizePoolLocks,
+	type Corpus,
+	type EventLockState
+} from '../domain/index-builder.js';
 import type { Index } from '../domain/types.js';
 import { sources } from '../upstream/sources.js';
+import type { RawDirectoryResponse } from '../upstream/types.js';
 import { loadSnapshot, saveSnapshot } from './snapshot.js';
 
-export type SourceName = 'players' | 'events' | 'results' | 'manifest' | 'points' | 'directory';
+export type SourceName =
+	| 'players'
+	| 'events'
+	| 'results'
+	| 'manifest'
+	| 'points'
+	| 'directory'
+	| 'judging';
 
 export interface SourceStatus {
 	lastSuccessAt: number | null;
@@ -54,13 +67,22 @@ export class Store {
 	#lastDirectorySignature: string | null = null;
 	#lastManifestSignature: string | null = null;
 
+	/**
+	 * Judging data version per event key, so a refresh can skip the ~247 KB
+	 * `getEventData` fetch when nothing has moved. Upstream offers no ETag, but
+	 * it does offer a 42-byte version endpoint, which amounts to the same thing
+	 * for this one payload.
+	 */
+	readonly #eventDataVersions = new Map<string, string>();
+
 	readonly #sourceStatus: Record<SourceName, SourceStatus> = {
 		players: emptyStatus(),
 		events: emptyStatus(),
 		results: emptyStatus(),
 		manifest: emptyStatus(),
 		points: emptyStatus(),
-		directory: emptyStatus()
+		directory: emptyStatus(),
+		judging: emptyStatus()
 	};
 
 	get index(): Index | null {
@@ -192,6 +214,14 @@ export class Store {
 
 		const previous = this.#corpus;
 
+		// Pool lock state for whatever the judging directory is showing. This
+		// runs after the parallel block, not inside it, because the directory
+		// is what names the keys to fetch.
+		const liveLocks = await this.#fetchLiveLocks(
+			directory ?? previous?.directory ?? null,
+			previous?.liveLocks
+		);
+
 		// The three core sources must be present, either freshly fetched or
 		// carried over. Without them we would build a hollow index and serve
 		// "no results found" as if it were the truth.
@@ -221,14 +251,18 @@ export class Store {
 			results: nextResults,
 			manifest: manifest ?? previous?.manifest ?? {},
 			points: points ?? previous?.points ?? {},
-			directory: directory ?? previous?.directory ?? null
+			directory: directory ?? previous?.directory ?? null,
+			liveLocks
 		};
 
 		try {
 			const index = buildIndex(corpus);
 			this.#corpus = corpus;
 			this.#index = index;
-			this.#lastDirectorySignature = signatureOf(directory);
+			this.#lastDirectorySignature = this.#signDirectory(
+				corpus.directory,
+				this.#cachedEventDataVersions(corpus.directory)
+			);
 			this.#lastManifestSignature = signatureOf(manifest);
 
 			if (coreFetched) {
@@ -266,6 +300,63 @@ export class Store {
 	}
 
 	/**
+	 * Read per-pool `isLocked` state for every event the judging directory is
+	 * showing. That is the only upstream signal for "this event has finished"
+	 * — directory presence is not, because `showInDirectory` is cleared by a
+	 * manual admin call and routinely stays true for weeks afterwards.
+	 *
+	 * The payload is ~247 KB, so each key is version-probed first (42 bytes)
+	 * and only refetched when it moved. A failure carries the previous
+	 * observation forward rather than dropping to unknown: the normalizer
+	 * treats unknown conservatively, and a judging outage should not change
+	 * what we serve for events that already finished.
+	 */
+	async #fetchLiveLocks(
+		directory: RawDirectoryResponse | null,
+		previous: Record<string, EventLockState> | undefined
+	): Promise<Record<string, EventLockState> | undefined> {
+		const keys = (directory?.eventDirectory ?? [])
+			.map((entry) => entry.eventKey)
+			.filter((key): key is string => typeof key === 'string' && key.length > 0);
+
+		// Forget events that have dropped out of the directory, so the map does
+		// not accumulate stale entries across refreshes.
+		for (const key of [...this.#eventDataVersions.keys()]) {
+			if (!keys.includes(key)) this.#eventDataVersions.delete(key);
+		}
+
+		if (keys.length === 0) return undefined;
+
+		const locks: Record<string, EventLockState> = {};
+		let failed: unknown = null;
+
+		await Promise.all(
+			keys.map(async (key) => {
+				const carried = previous?.[key];
+				try {
+					const version = signatureOf(await sources.eventDataVersion(key));
+					if (carried && version !== null && this.#eventDataVersions.get(key) === version) {
+						locks[key] = carried;
+						return;
+					}
+
+					locks[key] = summarizePoolLocks(await sources.eventData(key));
+					if (version !== null) this.#eventDataVersions.set(key, version);
+				} catch (error) {
+					failed = error;
+					// Force a real fetch next time rather than trusting a
+					// version we may not have successfully paired with data.
+					this.#eventDataVersions.delete(key);
+					if (carried) locks[key] = carried;
+				}
+			})
+		);
+
+		this.#record('judging', failed);
+		return Object.keys(locks).length > 0 ? locks : undefined;
+	}
+
+	/**
 	 * Cheap probes. 135 bytes and 16 KB respectively — these run frequently and
 	 * only escalate to a full refresh when something actually changed.
 	 */
@@ -273,7 +364,16 @@ export class Store {
 		try {
 			const directory = await sources.directory();
 			this.#record('directory', null);
-			const signature = signatureOf(directory);
+
+			// Locking a pool bumps the event's minorVersion but leaves the
+			// directory payload untouched, so the directory JSON alone cannot
+			// see an event finish. Fold the per-event version probes (42 bytes
+			// each) into the signature, or a finished event would keep being
+			// withheld until the next hourly full refresh.
+			const signature = this.#signDirectory(
+				directory,
+				await this.#probeEventDataVersions(directory)
+			);
 			if (signature === this.#lastDirectorySignature) return false;
 
 			console.log('[store] directory changed, triggering refresh');
@@ -284,6 +384,61 @@ export class Store {
 			this.#record('directory', error);
 			return false;
 		}
+	}
+
+	/**
+	 * The directory's change signature. A refresh and a probe must compute this
+	 * identically, or every probe after a refresh reports a spurious change.
+	 */
+	#signDirectory(
+		directory: RawDirectoryResponse | null,
+		versions: Record<string, string | null>
+	): string | null {
+		// Sorted: the probe fills `versions` in promise-completion order, and
+		// an unstable key order would serialize differently each time and look
+		// like a change on every poll.
+		const sorted = Object.keys(versions)
+			.sort()
+			.map((key) => [key, versions[key]]);
+		return signatureOf({ directory, versions: sorted });
+	}
+
+	/** The versions we already hold, with no upstream call. */
+	#cachedEventDataVersions(
+		directory: RawDirectoryResponse | null
+	): Record<string, string | null> {
+		const versions: Record<string, string | null> = {};
+		for (const entry of directory?.eventDirectory ?? []) {
+			if (!entry.eventKey) continue;
+			versions[entry.eventKey] = this.#eventDataVersions.get(entry.eventKey) ?? null;
+		}
+		return versions;
+	}
+
+	/**
+	 * Version probe for every directoried event. Returns null for any key that
+	 * failed, which keeps a transient error from looking like a version change
+	 * and stampeding a full refresh — the next probe retries it anyway.
+	 */
+	async #probeEventDataVersions(
+		directory: RawDirectoryResponse
+	): Promise<Record<string, string | null>> {
+		const keys = (directory.eventDirectory ?? [])
+			.map((entry) => entry.eventKey)
+			.filter((key): key is string => typeof key === 'string' && key.length > 0)
+			.sort();
+
+		const versions: Record<string, string | null> = {};
+		await Promise.all(
+			keys.map(async (key) => {
+				try {
+					versions[key] = signatureOf(await sources.eventDataVersion(key));
+				} catch {
+					versions[key] = this.#eventDataVersions.get(key) ?? null;
+				}
+			})
+		);
+		return versions;
 	}
 
 	async probeManifest(): Promise<boolean> {

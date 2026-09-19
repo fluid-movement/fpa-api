@@ -25,6 +25,12 @@ export const sources = {
     /** 135 bytes. Which event, if any, is being judged right now. */
     directory: () => fetchJson(`${config.upstream.judging}/getEventDirectory`),
     /** 42 bytes. Version probe for a live event. */
-    eventDataVersion: (eventKey) => fetchJson(`${config.upstream.judging}/getEventDataVersion/${encodeURIComponent(eventKey)}`)
+    eventDataVersion: (eventKey) => fetchJson(`${config.upstream.judging}/getEventDataVersion/${encodeURIComponent(eventKey)}`),
+    /**
+     * ~247 KB. The full judging blob for one event. Only ever fetched for
+     * events the directory is showing, and only when the version probe says it
+     * changed — we read nothing from it but the per-pool `isLocked` flags.
+     */
+    eventData: (eventKey) => fetchJson(`${config.upstream.judging}/getEventData/${encodeURIComponent(eventKey)}`)
 };
 //# sourceMappingURL=sources.js.map

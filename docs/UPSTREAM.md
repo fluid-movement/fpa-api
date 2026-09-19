@@ -38,6 +38,7 @@ All are public, unauthenticated `GET`s with `CORS: *`.
 | `{points}/downloadPointsData/{key}` | ~96 KB | One historical snapshot, on demand |
 | `{judging}/getEventDirectory` | **135 B** | Live event — the cheap freshness probe |
 | `{judging}/getEventDataVersion/{key}` | **42 B** | Live event version probe |
+| `{judging}/getEventData/{key}` | ~247 KB | Pool lock state. Only for directoried events, only when the version moved. |
 
 ### Caching characteristics
 
@@ -161,6 +162,8 @@ Every item here is handled explicitly in the normalizer and covered by a test.
 | Lowercase pool keys (`poola`) | 4 | Matched case-insensitively |
 | Non-contiguous round numbers | Common | Rounds are read by number, not assumed sequential |
 | `isHidden` results | 2 | Excluded from output |
+| Events still being judged | 0-1 at a time | Event and its partial results withheld until every pool is `isLocked` |
+| `showInDirectory` left true after an event ends | Routinely, for weeks | Never trusted alone; pool locks decide |
 | Manifest dates not zero-padded (`2025-7-3`) | All | Normalized to `YYYY-MM-DD` |
 
 ### The `points` trap
@@ -173,6 +176,34 @@ Every item here is handled explicitly in the normalizer and covered by a test.
 The `rulesId` lives in the judging system's event blob, which is discarded once an event ends, so
 **the results data does not tell you which ruleset produced it**. Points are therefore not
 comparable across events. Always sort and display by `place`.
+
+### Pool locks are the finished signal
+
+There is **no "is this running" flag on the event record.** `getAllEvents` returns whole DynamoDB
+items, and across all 912 events the complete key set is `key, eventName, startDate, endDate,
+createdAt, additionalData{fpaId, postName}`. `setEventSummary` writes exactly those five fields.
+
+The flag is `isLocked`, and it lives **per pool** in the judging service. A head judge locks a pool
+when its scoring is final (`POST /updatePoolLocked/{poolKey}/isLocked/{isLocked}`), and the flags
+are readable on `getEventData/{key}` under `eventData.eventData.poolMap` — note the doubled
+nesting. An event has finished when every pool is locked.
+
+**Presence in `getEventDirectory` does not mean "running".** `showInDirectory` is set when an event
+is imported and cleared only by a manual admin call (`removeEventFromDirectory`). In production the
+directory listed FPAW 2026 — which ended 2026-08-02 and had four complete division results — until
+well into September. Filtering on directory presence alone would have withheld a finished event
+indefinitely; the pool locks are what disambiguate it.
+
+Two further consequences:
+
+- Locking a pool bumps the event's `minorVersion` but leaves the `getEventDirectory` payload
+  byte-identical, so the 60 s directory probe has to fold the per-event version probes into its
+  signature or it will not notice an event finishing.
+- Upstream's own ranking `points` and `rank` totals still include a running event. We can decline
+  to attribute points to a withheld event, but we cannot recompute the totals.
+
+Handled in `findInProgress` (`src/domain/index-builder.ts`); override with
+`CONSUME_IN_PROGRESS_EVENTS=true`.
 
 ### Live judging data is ephemeral
 

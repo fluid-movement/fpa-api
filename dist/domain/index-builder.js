@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import { normalizeDivision, parseSeriesKey } from './divisions.js';
 import { buildPlayers } from './players.js';
 import { normalizeResult } from './results.js';
@@ -155,6 +156,65 @@ function buildPlacements(results, events) {
     return byPlayer;
 }
 /**
+ * Reduce a judging event's pool map to the one fact we care about: is every
+ * pool locked? The head judge locks a pool when its scoring is final, so an
+ * event with no unlocked pools left has finished.
+ *
+ * A pool map with no pools at all counts as unlocked. An event that has been
+ * created in the judging app but has no pools yet has certainly not finished.
+ */
+export function summarizePoolLocks(payload) {
+    const pools = Object.values(payload.eventData?.eventData?.poolMap ?? {});
+    const unlockedCount = pools.filter((pool) => pool.isLocked !== true).length;
+    return {
+        allPoolsLocked: pools.length > 0 && unlockedCount === 0,
+        poolCount: pools.length,
+        unlockedCount,
+        observedAt: Date.now()
+    };
+}
+/**
+ * Which events are still being judged, and must therefore be withheld.
+ *
+ * Only events the judging directory is showing are candidates — everything
+ * else is history. For those, the per-pool `isLocked` flags decide. Directory
+ * presence alone is not enough: upstream's `showInDirectory` is cleared by a
+ * manual admin call and routinely stays true for weeks after an event ends.
+ *
+ * When lock state was never observed we fall back to the calendar, and only
+ * withhold an event that could still plausibly be running. Withholding on
+ * unknown state alone would mean a judging-service outage silently drops a
+ * finished event's complete results.
+ */
+function findInProgress(corpus, warnings) {
+    const inProgress = new Set();
+    if (config.consumeInProgressEvents)
+        return inProgress;
+    const today = new Date().toISOString().slice(0, 10);
+    for (const entry of corpus.directory?.eventDirectory ?? []) {
+        const eventId = entry.eventKey;
+        if (!eventId)
+            continue;
+        const name = entry.eventName?.trim() || 'Unnamed Event';
+        const lock = corpus.liveLocks?.[eventId];
+        if (lock) {
+            if (lock.allPoolsLocked)
+                continue;
+            inProgress.add(eventId);
+            warnings.push(`Event ${eventId} ("${name}") is being judged — ` +
+                `${lock.unlockedCount} of ${lock.poolCount} pool(s) unlocked; withheld from the index`);
+            continue;
+        }
+        const endDate = corpus.events.allEventSummaryData?.[eventId]?.endDate ?? null;
+        if (endDate !== null && endDate < today)
+            continue;
+        inProgress.add(eventId);
+        warnings.push(`Event ${eventId} ("${name}") is in the judging directory with no observed pool ` +
+            `lock state and has not ended (endDate ${endDate ?? 'unknown'}); withheld from the index`);
+    }
+    return inProgress;
+}
+/**
  * Build the complete read model from a raw corpus.
  *
  * Pure and synchronous: no I/O, no clock beyond `builtAt`. That makes the whole
@@ -164,9 +224,15 @@ export function buildIndex(corpus) {
     const warnings = [];
     const { players, canonicalPlayerId, warnings: playerWarnings } = buildPlayers(corpus.players.players ?? {});
     warnings.push(...playerWarnings);
+    // Events still being judged are withheld whole — their results are partial
+    // and keep changing until the last pool is locked. Resolved before anything
+    // is normalized so the excluded ids can be filtered out at the source.
+    const inProgress = findInProgress(corpus, warnings);
     // Results first: events need result counts, rankings need result lookups.
     const results = new Map();
     for (const [id, raw] of Object.entries(corpus.results.results ?? {})) {
+        if (raw.eventId && inProgress.has(raw.eventId))
+            continue;
         const normalized = normalizeResult(id, raw, players, canonicalPlayerId);
         if (normalized)
             results.set(id, normalized);
@@ -181,6 +247,8 @@ export function buildIndex(corpus) {
     }
     const events = new Map();
     for (const [id, raw] of Object.entries(corpus.events.allEventSummaryData ?? {})) {
+        if (inProgress.has(id))
+            continue;
         const eventResults = resultsByEvent.get(id) ?? [];
         events.set(id, {
             id,

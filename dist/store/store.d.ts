@@ -1,6 +1,6 @@
 import { type Corpus } from '../domain/index-builder.js';
 import type { Index } from '../domain/types.js';
-export type SourceName = 'players' | 'events' | 'results' | 'manifest' | 'points' | 'directory';
+export type SourceName = 'players' | 'events' | 'results' | 'manifest' | 'points' | 'directory' | 'judging';
 export interface SourceStatus {
     lastSuccessAt: number | null;
     lastErrorAt: number | null;

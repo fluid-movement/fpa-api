@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { fetchJson } from './client.js';
 import type {
 	RawDirectoryResponse,
+	RawEventDataResponse,
 	RawEventDataVersion,
 	RawEventsResponse,
 	RawManifestResponse,
@@ -56,5 +57,15 @@ export const sources = {
 	eventDataVersion: (eventKey: string) =>
 		fetchJson<RawEventDataVersion>(
 			`${config.upstream.judging}/getEventDataVersion/${encodeURIComponent(eventKey)}`
+		),
+
+	/**
+	 * ~247 KB. The full judging blob for one event. Only ever fetched for
+	 * events the directory is showing, and only when the version probe says it
+	 * changed — we read nothing from it but the per-pool `isLocked` flags.
+	 */
+	eventData: (eventKey: string) =>
+		fetchJson<RawEventDataResponse>(
+			`${config.upstream.judging}/getEventData/${encodeURIComponent(eventKey)}`
 		)
 };

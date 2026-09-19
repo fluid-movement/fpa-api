@@ -1,4 +1,4 @@
-import type { RawDirectoryResponse, RawEventsResponse, RawManifestResponse, RawPlayersResponse, RawPointsResponse, RawPointsSnapshotResponse, RawResultsResponse } from '../upstream/types.js';
+import type { RawDirectoryResponse, RawEventDataResponse, RawEventsResponse, RawManifestResponse, RawPlayersResponse, RawPointsResponse, RawPointsSnapshotResponse, RawResultsResponse } from '../upstream/types.js';
 import { normalizeDivision } from './divisions.js';
 import type { DivisionResult, Index, RankingSeries, RatingSeries } from './types.js';
 /**
@@ -14,6 +14,20 @@ export interface Corpus {
     manifest: RawManifestResponse;
     points: RawPointsResponse;
     directory: RawDirectoryResponse | null;
+    /**
+     * Per-event pool lock state, for the events the judging service is
+     * currently showing. An absent entry means "never observed" — either we
+     * have not fetched it yet or the judging service was unreachable — which is
+     * treated differently from an observed unlocked pool. See `findInProgress`.
+     */
+    liveLocks?: Record<string, EventLockState>;
+}
+export interface EventLockState {
+    /** False while any pool is still unlocked, i.e. the event is being judged. */
+    allPoolsLocked: boolean;
+    poolCount: number;
+    unlockedCount: number;
+    observedAt: number;
 }
 /**
  * Reshape a single-snapshot payload into the series-keyed form the index
@@ -40,6 +54,15 @@ export declare function buildPointsSeries(points: RawPointsResponse, results: Ma
     ratings: Map<string, RatingSeries>;
     warnings: string[];
 };
+/**
+ * Reduce a judging event's pool map to the one fact we care about: is every
+ * pool locked? The head judge locks a pool when its scoring is final, so an
+ * event with no unlocked pools left has finished.
+ *
+ * A pool map with no pools at all counts as unlocked. An event that has been
+ * created in the judging app but has no pools yet has certainly not finished.
+ */
+export declare function summarizePoolLocks(payload: RawEventDataResponse): EventLockState;
 /**
  * Build the complete read model from a raw corpus.
  *
