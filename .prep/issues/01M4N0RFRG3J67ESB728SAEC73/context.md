@@ -1,0 +1,1 @@
+Add `tokensMatch(provided, expected)` in `src/lib/auth.ts`: hash both with SHA-256 and compare the digests with `crypto.timingSafeEqual`, which needs equal-length buffers and so avoids leaking the token length too. `POST /refresh` in `src/routes/admin.ts` uses it ([Tiered refresh](/features/refresh-tiers.md)).

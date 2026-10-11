@@ -1,5 +1,6 @@
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import { config } from '../config.js';
+import { tokensMatch } from '../lib/auth.js';
 import { httpError } from '../lib/http.js';
 import { ErrorSchema } from '../schemas/domain.js';
 import { store } from '../store/store.js';
@@ -92,7 +93,7 @@ admin.openapi(refreshRoute, async (c) => {
 	}
 
 	const provided = c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
-	if (provided !== config.refreshToken) {
+	if (!tokensMatch(provided, config.refreshToken)) {
 		throw httpError(401, 'Invalid or missing refresh token');
 	}
 

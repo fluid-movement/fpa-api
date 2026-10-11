@@ -1,0 +1,3 @@
+- [x] POST /refresh compares the bearer token in constant time
+- [x] Missing, wrong and correct tokens behave as before (401, 401, refresh)
+- [x] Unit tests cover tokensMatch

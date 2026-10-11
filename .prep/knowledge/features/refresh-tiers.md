@@ -10,7 +10,7 @@ scope:
   - src/store/scheduler.ts
   - src/routes/admin.ts
   - src/config.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 4cd5d6c5955a67bafd7dbc4da2caab895406115c
 ---
 
 Upstream has no ETag or Last-Modified, so freshness comes from cheap probes that escalate to a full corpus refresh. Table and rationale: `docs/ARCHITECTURE.md`, section "Refresh strategy". The work is done by [Store](/components/store.md); timers live in `startScheduler(store)` (`src/store/scheduler.ts`).
@@ -33,4 +33,4 @@ Intervals are parsed by `intEnv` in `src/config.ts` and must be positive integer
 - All paths go through `refresh()`, which shares one in-flight promise.
 
 ## POST /refresh
-Defined in `src/routes/admin.ts`. With `REFRESH_TOKEN` unset the route returns 503 (disabled, fails closed). Otherwise it requires `Authorization: Bearer <token>` (401 on mismatch), runs `store.refresh()` and returns `{ refreshed: true, status }`. If `refresh()` returns `false` (including the carried-over case) it answers 503 and points to `GET /health`. `GET /healthz` is a liveness-only check independent of upstream.
+Defined in `src/routes/admin.ts`. With `REFRESH_TOKEN` unset the route returns 503 (disabled, fails closed). Otherwise it requires `Authorization: Bearer <token>`, compared in constant time by `tokensMatch` (`src/lib/auth.ts`; 401 on mismatch), runs `store.refresh()` and returns `{ refreshed: true, status }`. If `refresh()` returns `false` (including the carried-over case) it answers 503 and points to `GET /health`. `GET /healthz` is a liveness-only check independent of upstream.

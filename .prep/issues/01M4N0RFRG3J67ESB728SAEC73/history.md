@@ -1,0 +1,1 @@
+- 2026-10-11T08:32:25Z claude-code/opus-5.5: Verified with REFRESH_TOKEN=tok against createApp(): no header 401, wrong token 401, correct token 200
