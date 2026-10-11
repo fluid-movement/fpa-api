@@ -1,0 +1,4 @@
+- [x] Index.live names a directory event only when the pool-lock gating classifies it as in progress
+- [x] Index.live is null when every directoried event has finished
+- [x] Index.live is still derived when CONSUME_IN_PROGRESS_EVENTS is true, without withholding the event
+- [x] Tests cover live with unlocked pools, all pools locked, and the escape hatch

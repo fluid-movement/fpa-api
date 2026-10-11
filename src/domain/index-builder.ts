@@ -285,7 +285,8 @@ export function summarizePoolLocks(payload: RawEventDataResponse): EventLockStat
 }
 
 /**
- * Which events are still being judged, and must therefore be withheld.
+ * Which events are still being judged. Unless `CONSUME_IN_PROGRESS_EVENTS` is
+ * set, these are withheld from the index; either way they define `Index.live`.
  *
  * Only events the judging directory is showing are candidates — everything
  * else is history. For those, the per-pool `isLocked` flags decide. Directory
@@ -299,8 +300,7 @@ export function summarizePoolLocks(payload: RawEventDataResponse): EventLockStat
  */
 function findInProgress(corpus: Corpus, warnings: string[]): Set<string> {
 	const inProgress = new Set<string>();
-	if (config.consumeInProgressEvents) return inProgress;
-
+	const withhold = !config.consumeInProgressEvents;
 	const today = new Date().toISOString().slice(0, 10);
 
 	for (const entry of corpus.directory?.eventDirectory ?? []) {
@@ -313,10 +313,12 @@ function findInProgress(corpus: Corpus, warnings: string[]): Set<string> {
 		if (lock) {
 			if (lock.allPoolsLocked) continue;
 			inProgress.add(eventId);
-			warnings.push(
-				`Event ${eventId} ("${name}") is being judged — ` +
-					`${lock.unlockedCount} of ${lock.poolCount} pool(s) unlocked; withheld from the index`
-			);
+			if (withhold) {
+				warnings.push(
+					`Event ${eventId} ("${name}") is being judged — ` +
+						`${lock.unlockedCount} of ${lock.poolCount} pool(s) unlocked; withheld from the index`
+				);
+			}
 			continue;
 		}
 
@@ -324,10 +326,12 @@ function findInProgress(corpus: Corpus, warnings: string[]): Set<string> {
 		if (endDate !== null && endDate < today) continue;
 
 		inProgress.add(eventId);
-		warnings.push(
-			`Event ${eventId} ("${name}") is in the judging directory with no observed pool ` +
-				`lock state and has not ended (endDate ${endDate ?? 'unknown'}); withheld from the index`
-		);
+		if (withhold) {
+			warnings.push(
+				`Event ${eventId} ("${name}") is in the judging directory with no observed pool ` +
+					`lock state and has not ended (endDate ${endDate ?? 'unknown'}); withheld from the index`
+			);
+		}
 	}
 
 	return inProgress;
@@ -351,11 +355,12 @@ export function buildIndex(corpus: Corpus): Index {
 	// and keep changing until the last pool is locked. Resolved before anything
 	// is normalized so the excluded ids can be filtered out at the source.
 	const inProgress = findInProgress(corpus, warnings);
+	const withheld = config.consumeInProgressEvents ? new Set<string>() : inProgress;
 
 	// Results first: events need result counts, rankings need result lookups.
 	const results = new Map<string, DivisionResult>();
 	for (const [id, raw] of Object.entries(corpus.results.results ?? {})) {
-		if (raw.eventId && inProgress.has(raw.eventId)) continue;
+		if (raw.eventId && withheld.has(raw.eventId)) continue;
 		const normalized = normalizeResult(id, raw, players, canonicalPlayerId);
 		if (normalized) results.set(id, normalized);
 	}
@@ -369,7 +374,7 @@ export function buildIndex(corpus: Corpus): Index {
 
 	const events = new Map<string, EventSummary>();
 	for (const [id, raw] of Object.entries(corpus.events.allEventSummaryData ?? {})) {
-		if (inProgress.has(id)) continue;
+		if (withheld.has(id)) continue;
 		const eventResults = resultsByEvent.get(id) ?? [];
 		events.set(id, {
 			id,
@@ -422,7 +427,11 @@ export function buildIndex(corpus: Corpus): Index {
 		);
 	}
 
-	const liveEntry = corpus.directory?.eventDirectory?.[0];
+	// Live is the event being judged right now — by the same pool-lock rule that
+	// withholds it, not by directory presence, which outlasts the event.
+	const liveEntry = corpus.directory?.eventDirectory?.find(
+		(entry) => entry.eventKey && inProgress.has(entry.eventKey)
+	);
 
 	const pointsSeries = buildPointsSeries(corpus.points, results, canonicalPlayerId);
 	warnings.push(...pointsSeries.warnings);

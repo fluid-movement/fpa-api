@@ -9,7 +9,7 @@ generated:
 scope:
   - src/domain/index-builder.ts
   - src/domain/types.ts
-confirmed_commit: 1718de4142a82df247e6eadbe9330bd9d4a3949d
+confirmed_commit: 2f4eaf65953ce9fed23c56b29de33a2d7e6bdb6f
 ---
 
 `buildIndex(corpus)` in `src/domain/index-builder.ts` is a pure, synchronous function: raw `Corpus` in, immutable `Index` out (type in `src/domain/types.ts`). No I/O; the only clock reads are `builtAt` and the calendar fallback in `findInProgress`. The [Store](/components/store.md) calls it on every refresh and swaps the result in atomically. `Corpus` is also what [snapshot persistence](/components/snapshot-persistence.md) writes to disk (raw, so normalization changes never meet stale derived data).
@@ -25,7 +25,7 @@ confirmed_commit: 1718de4142a82df247e6eadbe9330bd9d4a3949d
 8. `buildSnapshots` from the manifest (hidden entries dropped, newest `createdAt` first, dates padded to ISO).
 
 ## What the Index holds
-`builtAt`, `players`, `canonicalPlayerId` (every GUID incl. aliases), `events`, `results`, `resultsByEvent`, `placementsByPlayer`, `rankings`, `ratings`, `snapshots`, `live` and `warnings`. `live` is simply the first `eventDirectory` entry (`eventDirectory?.[0]`), even if that event is being withheld.
+`builtAt`, `players`, `canonicalPlayerId` (every GUID incl. aliases), `events`, `results`, `resultsByEvent`, `placementsByPlayer`, `rankings`, `ratings`, `snapshots`, `live` and `warnings`. `live` is the first `eventDirectory` entry that is in progress by the pool-lock rule (see [Withholding in-progress events](/features/in-progress-event-gating.md)), or null.
 
 ## Conventions
 - Problems become strings in `warnings` (surfaced on `/health`) instead of exceptions; see [Degrade and flag](/conventions/degrade-and-flag.md).

@@ -247,16 +247,6 @@ describe('buildIndex', () => {
 		expect(index.snapshots[1]!.type).toBe('ranking');
 	});
 
-	it('exposes the live event from the directory', () => {
-		const index = buildIndex(
-			corpus({
-				directory: { eventDirectory: [{ eventKey: 'e1', eventName: 'Test Event', modifiedAt: 123 }] }
-			})
-		);
-
-		expect(index.live).toEqual({ eventId: 'e1', eventName: 'Test Event', modifiedAt: 123 });
-	});
-
 	// Events still being judged are withheld whole. The signal is per-pool
 	// `isLocked` from the judging service, NOT presence in the directory:
 	// upstream's `showInDirectory` is cleared by a manual admin call and in
@@ -268,6 +258,18 @@ describe('buildIndex', () => {
 
 		const locks = (allPoolsLocked: boolean, unlockedCount: number) => ({
 			e1: { allPoolsLocked, poolCount: 4, unlockedCount, observedAt: 0 }
+		});
+
+		it('reports the event being judged as live', () => {
+			const index = buildIndex(corpus({ directory, liveLocks: locks(false, 2) }));
+
+			expect(index.live).toEqual({ eventId: 'e1', eventName: 'Test Event', modifiedAt: 123 });
+		});
+
+		it('does not report a finished event as live just because it is still directoried', () => {
+			const index = buildIndex(corpus({ directory, liveLocks: locks(true, 0) }));
+
+			expect(index.live).toBeNull();
 		});
 
 		it('consumes a directoried event once every pool is locked', () => {
@@ -373,6 +375,9 @@ describe('buildIndex', () => {
 
 			expect(index.events.has('e1')).toBe(true);
 			expect(index.results.has('r1')).toBe(true);
+			// Still being judged, so still live — the flag only stops withholding.
+			expect(index.live?.eventId).toBe('e1');
+			expect(index.warnings.some((w) => w.includes('withheld'))).toBe(false);
 
 			vi.unstubAllEnvs();
 			vi.resetModules();

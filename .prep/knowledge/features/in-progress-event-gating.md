@@ -10,7 +10,7 @@ scope:
   - src/domain/index-builder.ts
   - src/store/store.ts
   - src/upstream/sources.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 2f4eaf65953ce9fed23c56b29de33a2d7e6bdb6f
 ---
 
 An event still being judged has partial, changing results, so it is withheld whole from the `Index`. Full upstream rationale: `docs/UPSTREAM.md`, section "Pool locks are the finished signal".
@@ -29,8 +29,11 @@ The event record has no "running" flag. The judging service has a per-pool `isLo
 
 ## Override
 
-`CONSUME_IN_PROGRESS_EVENTS=true` (`config.consumeInProgressEvents`, strict `=== 'true'`) makes `findInProgress` return an empty set, so everything is published. See [Configuration](/components/configuration.md).
+`CONSUME_IN_PROGRESS_EVENTS=true` (`config.consumeInProgressEvents`, strict `=== 'true'`) publishes in-progress events instead of withholding them (and drops the "withheld" warnings). `findInProgress` still classifies them, so `Index.live` is unaffected. See [Configuration](/components/configuration.md).
+
+## Live event
+`Index.live` is the first directory entry that `findInProgress` classifies as in progress, or null. A finished event that lingers in the directory is never live. Nothing serves `live` yet; it is groundwork for live scores.
 
 ## Limits
 
-Upstream ranking totals (`points`, `rank`) still include a running event. We can decline to attribute points to the withheld event (breakdown entries then have null event fields) but cannot recompute totals. `Index.live` is taken from the first directory entry regardless of lock state.
+Upstream ranking totals (`points`, `rank`) still include a running event. We can decline to attribute points to the withheld event (breakdown entries then have null event fields) but cannot recompute totals.
