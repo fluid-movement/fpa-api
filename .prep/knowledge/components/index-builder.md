@@ -9,7 +9,7 @@ generated:
 scope:
   - src/domain/index-builder.ts
   - src/domain/types.ts
-confirmed_commit: 3eba31febdf395f278c52a1f33985da446986864
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 `buildIndex(corpus)` in `src/domain/index-builder.ts` is a pure, synchronous function: raw `Corpus` in, immutable `Index` out (type in `src/domain/types.ts`). No I/O; the only clock reads are `builtAt` and the calendar fallback in `findInProgress`. The [Store](/components/store.md) calls it on every refresh and swaps the result in atomically. `Corpus` is also what [snapshot persistence](/components/snapshot-persistence.md) writes to disk (raw, so normalization changes never meet stale derived data).

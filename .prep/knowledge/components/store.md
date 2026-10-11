@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:19:00Z
 scope:
   - src/store/store.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 `Store` (`src/store/store.ts`, singleton `store`) holds the current read model (`Index`) and owns all refresh logic. Routes read from it; the scheduler and `POST /refresh` drive it. Related: [Snapshot persistence](/components/snapshot-persistence.md), [In-memory read model](/decisions/in-memory-read-model.md); `docs/ARCHITECTURE.md`, section "Two invariants in the store".

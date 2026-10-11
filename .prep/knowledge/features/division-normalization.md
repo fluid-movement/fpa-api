@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:19:40Z
 scope:
   - src/domain/divisions.ts
-confirmed_commit: 3eba31febdf395f278c52a1f33985da446986864
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 Upstream division names are free text (`Open Pairs`, `open pairs`, `Open Coop`, `undefined`, `Results`, `Open Test`...). Rankings and event listings group by division, so `src/domain/divisions.ts` canonicalizes them.

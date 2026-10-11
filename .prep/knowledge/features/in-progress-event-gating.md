@@ -10,7 +10,7 @@ scope:
   - src/domain/index-builder.ts
   - src/store/store.ts
   - src/upstream/sources.ts
-confirmed_commit: 3594ceeff269a1222970df21c9a495bec9633e02
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 An event still being judged has partial, changing results, so it is withheld whole from the `Index`. Full upstream rationale: `docs/UPSTREAM.md`, section "Pool locks are the finished signal".

@@ -9,7 +9,7 @@ generated:
 scope:
   - src/lib/matching.ts
   - src/routes/match.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 `GET /match/events` and `GET /match/players` (`src/routes/match.ts`) help a client (typically fpa-events) find the upstream record that corresponds to one of its own. They return ranked suggestions and never link automatically: fpa-events and the upstream services share no identifier, and binding the wrong results to an event is worse than showing none. A human must confirm before the id is stored. Even `confident: true` means only "near-certain".

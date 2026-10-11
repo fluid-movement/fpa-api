@@ -9,7 +9,7 @@ generated:
 scope:
   - src/store/snapshot.ts
   - src/store/snapshot.test.ts
-confirmed_commit: 86c6bb1d3353297fd914a3d582fb301a7c48e4b2
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 `src/store/snapshot.ts` persists the last good raw `Corpus` so a restart during an upstream outage still serves data. Overview of the rationale: `docs/ARCHITECTURE.md`, section "Surviving restarts".

@@ -10,7 +10,7 @@ scope:
   - Dockerfile
   - .dockerignore
   - package.json
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 Production is a Docker image run on Coolify (Hetzner VPS, alongside fpa-events). Full runbook: `docs/OPERATIONS.md`, section "Deploying to Coolify".

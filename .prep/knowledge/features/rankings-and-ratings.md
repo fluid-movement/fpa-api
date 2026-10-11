@@ -11,7 +11,7 @@ scope:
   - src/routes/rankings.ts
   - src/routes/ratings.ts
   - src/routes/snapshots.ts
-confirmed_commit: 3eba31febdf395f278c52a1f33985da446986864
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 Rankings and ratings are different data and are kept in separate maps on the `Index`: `rankings` and `ratings`, keyed by series name (`ranking-open`, `rating-women`, ...). `buildPointsSeries(points, results)` in `src/domain/index-builder.ts` builds both; the series prefix decides which via `parseSeriesKey` ([Division normalization](/features/division-normalization.md)).

@@ -9,7 +9,7 @@ generated:
 scope:
   - src/config.ts
   - .env.example
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 All runtime configuration is read once at import time into the `config` object in `src/config.ts` (`env()` for strings, `intEnv()` for positive integers). `.env.example` lists every variable at its built-in default, so an empty environment works.

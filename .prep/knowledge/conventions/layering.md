@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:19:39Z
 scope:
   - src/**
-confirmed_commit: 3594ceeff269a1222970df21c9a495bec9633e02
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 The code is split into four layers with one-way dependencies. Keeping logic in the right layer is what lets the tests run with no network and the whole read path serve from RAM.

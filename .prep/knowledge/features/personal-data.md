@@ -10,7 +10,7 @@ scope:
   - src/domain/players.ts
   - src/schemas/domain.ts
   - src/config.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 Player gender and FPA membership number are personal data and are withheld by default.

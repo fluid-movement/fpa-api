@@ -10,7 +10,7 @@ scope:
   - src/**/*.test.ts
   - vitest.config.ts
   - .github/workflows/**
-confirmed_commit: 3594ceeff269a1222970df21c9a495bec9633e02
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 `pnpm test` runs `vitest run` (config in `vitest.config.ts`: node environment, `src/**/*.test.ts`). Tests are colocated with the code they cover and never touch the network.

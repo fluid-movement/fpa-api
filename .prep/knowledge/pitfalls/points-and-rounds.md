@@ -9,7 +9,7 @@ generated:
 scope:
   - src/domain/results.ts
   - src/schemas/domain.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 Two traps in result data. Background: `docs/UPSTREAM.md`, section "The `points` trap".

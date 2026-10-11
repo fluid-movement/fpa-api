@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:18:38Z
 scope:
   - src/upstream/**
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 `src/upstream/` is the only code that talks to the network. It fetches and types raw payloads and interprets nothing; all interpretation lives in `src/domain/` (see [Index builder](/components/index-builder.md)). Long-form data notes: `docs/UPSTREAM.md`, sections "The five services", "Endpoints consumed" and "Caching characteristics".

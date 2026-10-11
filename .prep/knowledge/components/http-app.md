@@ -10,7 +10,7 @@ scope:
   - src/app.ts
   - src/lib/http.ts
   - src/index.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 `createApp()` in `src/app.ts` builds the `OpenAPIHono` instance; `src/index.ts` serves it with `@hono/node-server`. Route modules follow [Routes and schemas](/conventions/routes-and-schemas.md); the data they read is the in-memory [Store](/components/store.md) (`src/store/store.ts`, see [In-memory read model](/decisions/in-memory-read-model.md)).

@@ -10,7 +10,7 @@ scope:
   - src/store/scheduler.ts
   - src/routes/admin.ts
   - src/config.ts
-confirmed_commit: 4cd5d6c5955a67bafd7dbc4da2caab895406115c
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 Upstream has no ETag or Last-Modified, so freshness comes from cheap probes that escalate to a full corpus refresh. Table and rationale: `docs/ARCHITECTURE.md`, section "Refresh strategy". The work is done by [Store](/components/store.md); timers live in `startScheduler(store)` (`src/store/scheduler.ts`).

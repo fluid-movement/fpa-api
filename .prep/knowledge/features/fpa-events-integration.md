@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:19:49Z
 scope:
   - docs/INTEGRATION.md
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 fpa-events (SvelteKit) is the one known consumer. Full guide: `docs/INTEGRATION.md`; this entry is the contract summary. Changing response shapes affects it, so keep `openapi.json` accurate ([Routes and schemas](/conventions/routes-and-schemas.md)).

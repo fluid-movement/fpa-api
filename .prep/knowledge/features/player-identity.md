@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:19:40Z
 scope:
   - src/domain/players.ts
-confirmed_commit: 1cfb518ac5408e720b74204602889c756e2bfa72
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 The same person can exist under several upstream GUIDs; a record's `aliasKey` points at its canonical entry (about 508 of 3138 in prod, chains up to 3 deep). `buildPlayers(raw)` in `src/domain/players.ts` resolves every GUID and returns `{ players, canonicalPlayerId, warnings }`.

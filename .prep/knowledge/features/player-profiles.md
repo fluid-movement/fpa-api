@@ -12,6 +12,7 @@ scope:
   - src/store/store.ts
   - src/routes/players.ts
   - src/schemas/domain.ts
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 Player profile content (bio, nickname, headline, career highlights, partners, mentors, sponsors, links and similar) is not upstream data. It is edited in **fpa-profiles**, a separate SvelteKit app with its own Postgres, and seeded there from the old FPA WordPress site. This service only reads it, so it stays read-only and database-free ([In-memory read model](/decisions/in-memory-read-model.md)).

@@ -9,7 +9,7 @@ generated:
 scope:
   - src/domain/**
   - src/routes/admin.ts
-confirmed_commit: 3eba31febdf395f278c52a1f33985da446986864
+confirmed_commit: 6d5c1ad18e50399efa9d51af7406f82243c41406
 ---
 
 Upstream has no referential integrity, so the domain layer never discards a record because a reference is broken. It substitutes a usable value, keeps the data, and appends a human-readable string to `Index.warnings`. `GET /health` (`src/routes/admin.ts`, `StatusSchema.warnings`, from `store.status`) returns them as "non-fatal data problems found while normalizing". When adding normalization code, follow this pattern: never throw on bad data, never silently filter.
