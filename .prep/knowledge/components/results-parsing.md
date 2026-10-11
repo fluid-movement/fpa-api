@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:19:40Z
 scope:
   - src/domain/results.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 3eba31febdf395f278c52a1f33985da446986864
 ---
 
 `normalizeResult(id, raw, players, canonicalPlayerId)` in `src/domain/results.ts` turns one upstream result record (one division at one event) into a `DivisionResult`, or `null` when it should not be published.
@@ -20,10 +20,12 @@ confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
 - `teamData` that is not an array yields an empty pool.
 - Non-numeric `place` / `points` become `null`.
 
-## Returns null (record dropped silently, no warning)
+## Returns null (record dropped)
 - missing `resultsData`, or `isHidden === true`;
 - no event id (`raw.eventId ?? data.eventId`);
 - no parsable rounds.
+
+`buildIndex` lists every dropped record that is not hidden in one `/health` warning ("N result(s) dropped for having no event id or no usable rounds: ids"). Hidden results are unpublished on purpose and stay silent.
 
 ## Output
 - Rounds sorted ascending. Round 1 is the final: `roundName` gives Finals, Semifinals, Quarterfinals, then `Round N`. Pools sorted by name.

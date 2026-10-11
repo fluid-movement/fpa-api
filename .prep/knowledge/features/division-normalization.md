@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:19:40Z
 scope:
   - src/domain/divisions.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 3eba31febdf395f278c52a1f33985da446986864
 ---
 
 Upstream division names are free text (`Open Pairs`, `open pairs`, `Open Coop`, `undefined`, `Results`, `Open Test`...). Rankings and event listings group by division, so `src/domain/divisions.ts` canonicalizes them.
@@ -20,7 +20,7 @@ Upstream division names are free text (`Open Pairs`, `open pairs`, `Open Coop`, 
 4. `OVERRIDES` table maps known spellings to `CANONICAL_DIVISIONS`: `Open Pairs`, `Women Pairs`, `Mixed Pairs`, `Open Co-op` (bare `open`, `women`, `mixed`, `coop` included).
 5. Anything else is title-cased and passed through (e.g. `Open Pairs Challenger`), so unseen real divisions still appear, merely ungrouped.
 
-Markers match the whole folded value, so `Open Test` folds to `open test`, which is not a marker and passes through as `Open Test`; only the bare word `test` becomes Unknown.
+Markers match the whole folded value: `test` and `open test` (from `Open Test`) become Unknown, but a longer name containing "test" passes through.
 
 The raw string is always preserved as `divisionRaw` on each `DivisionResult` ([Results parsing](/components/results-parsing.md)) so odd results can be traced. Normalization happens in the domain layer, not at fetch time ([Layering](/conventions/layering.md)).
 

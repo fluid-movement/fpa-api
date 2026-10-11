@@ -115,7 +115,10 @@ export const RatingsQuery = RankingPaginationQuery.extend({
 
 export const SnapshotListQuery = z.object({
 	type: z.enum(['ranking', 'rating']).optional(),
-	division: z.string().optional().openapi({ example: 'open' })
+	division: z
+		.string()
+		.optional()
+		.openapi({ description: 'Short division token, as in the series key, e.g. "open"', example: 'open' })
 });
 
 export const EventResultsQuery = z.object({

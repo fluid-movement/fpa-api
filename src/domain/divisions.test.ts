@@ -26,6 +26,8 @@ describe('normalizeDivision', () => {
 	it('treats data-entry noise as unknown rather than a division', () => {
 		expect(normalizeDivision('undefined')).toBe(UNKNOWN_DIVISION);
 		expect(normalizeDivision('Results')).toBe(UNKNOWN_DIVISION);
+		expect(normalizeDivision('Open Test')).toBe(UNKNOWN_DIVISION);
+		expect(normalizeDivision('open test')).toBe(UNKNOWN_DIVISION);
 		expect(normalizeDivision('')).toBe(UNKNOWN_DIVISION);
 		expect(normalizeDivision(null)).toBe(UNKNOWN_DIVISION);
 		expect(normalizeDivision(undefined)).toBe(UNKNOWN_DIVISION);

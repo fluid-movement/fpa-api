@@ -2058,9 +2058,11 @@
           {
             "schema": {
               "type": "string",
+              "description": "Short division token, as in the series key, e.g. \"open\"",
               "example": "open"
             },
             "required": false,
+            "description": "Short division token, as in the series key, e.g. \"open\"",
             "name": "division",
             "in": "query"
           }

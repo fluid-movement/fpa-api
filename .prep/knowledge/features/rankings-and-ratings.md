@@ -11,7 +11,7 @@ scope:
   - src/routes/rankings.ts
   - src/routes/ratings.ts
   - src/routes/snapshots.ts
-confirmed_commit: 1718de4142a82df247e6eadbe9330bd9d4a3949d
+confirmed_commit: 3eba31febdf395f278c52a1f33985da446986864
 ---
 
 Rankings and ratings are different data and are kept in separate maps on the `Index`: `rankings` and `ratings`, keyed by series name (`ranking-open`, `rating-women`, ...). `buildPointsSeries(points, results)` in `src/domain/index-builder.ts` builds both; the series prefix decides which via `parseSeriesKey` ([Division normalization](/features/division-normalization.md)).
@@ -30,4 +30,4 @@ Elo-style strength estimate, no breakdown. Entries lacking `id` or a numeric `ra
 
 ## Gaps
 - `playerId` is the canonical id: `buildPointsSeries(points, results, canonicalPlayerId)` resolves alias GUIDs, and warns when a series lists one player twice under different aliases.
-- Snapshot `division` uses the manifest's `divisionName` verbatim when present, else the series token (`index-builder.ts:98`); it is not normalized.
+- Snapshot `division` is the series token from the key (`open`), like live series; the manifest's `divisionName` (`Open Pairs`) is ignored, so `GET /snapshots?division=open` matches.

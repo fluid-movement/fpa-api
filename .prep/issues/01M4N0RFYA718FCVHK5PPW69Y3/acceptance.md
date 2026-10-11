@@ -1,0 +1,5 @@
+- [x] 'Open Test' (and its casing variants) normalize to Unknown
+- [x] SnapshotRef.division is the short series token, so GET /snapshots?division=open matches production manifests
+- [x] Results dropped for a missing event id or no usable rounds produce a warning on /health; hidden results stay silent
+- [x] Tests cover all three
+- [x] openapi.json is regenerated if the spec changed

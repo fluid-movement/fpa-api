@@ -77,6 +77,24 @@ describe('buildIndex', () => {
 		expect(index.warnings.some((w) => w.includes('missing from the event directory'))).toBe(true);
 	});
 
+	it('flags results it cannot use, but not hidden ones', () => {
+		const index = buildIndex(
+			corpus({
+				results: {
+					results: {
+						noEvent: { key: 'noEvent', resultsData: { round1: {} } },
+						noRounds: { key: 'noRounds', eventId: 'e1', resultsData: {} },
+						hidden: { key: 'hidden', eventId: 'e1', resultsData: { isHidden: true } }
+					}
+				}
+			})
+		);
+
+		expect(index.results.size).toBe(0);
+		const warning = index.warnings.find((w) => w.includes('result(s) dropped'));
+		expect(warning).toBe('2 result(s) dropped for having no event id or no usable rounds: noEvent, noRounds');
+	});
+
 	it('flattens placements per player, including teammates', () => {
 		const index = buildIndex(corpus());
 
@@ -245,6 +263,7 @@ describe('buildIndex', () => {
 		]);
 		expect(index.snapshots[0]!.date).toBe('2026-01-15');
 		expect(index.snapshots[1]!.type).toBe('ranking');
+		expect(index.snapshots[1]!.division).toBe('open');
 	});
 
 	// Events still being judged are withheld whole. The signal is per-pool

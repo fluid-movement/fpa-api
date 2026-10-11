@@ -70,7 +70,8 @@ const fixture: Corpus = {
 	},
 	manifest: {
 		manifest: {
-			s1: { key: 'ranking-open_2026-1-15', date: '2026-1-15', divisionName: 'open', createdAt: 200 }
+			// Production manifests carry the display label, not the series token.
+			s1: { key: 'ranking-open_2026-1-15', date: '2026-1-15', divisionName: 'Open Pairs', createdAt: 200 }
 		}
 	},
 	points: {
@@ -238,8 +239,14 @@ describe('GET /snapshots', () => {
 		expect(body.snapshots[0]).toMatchObject({
 			key: 'ranking-open_2026-1-15',
 			type: 'ranking',
+			division: 'open',
 			date: '2026-01-15'
 		});
+	});
+
+	it('filters snapshots by the series division token', async () => {
+		expect((await get('/snapshots?division=open')).body.snapshots).toHaveLength(1);
+		expect((await get('/snapshots?division=women')).body.snapshots).toHaveLength(0);
 	});
 
 	it('404s for an unknown snapshot without calling upstream', async () => {

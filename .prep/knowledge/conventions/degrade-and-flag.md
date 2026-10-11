@@ -9,7 +9,7 @@ generated:
 scope:
   - src/domain/**
   - src/routes/admin.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 3eba31febdf395f278c52a1f33985da446986864
 ---
 
 Upstream has no referential integrity, so the domain layer never discards a record because a reference is broken. It substitutes a usable value, keeps the data, and appends a human-readable string to `Index.warnings`. `GET /health` (`src/routes/admin.ts`, `StatusSchema.warnings`, from `store.status`) returns them as "non-fatal data problems found while normalizing". When adding normalization code, follow this pattern: never throw on bad data, never silently filter.
@@ -25,7 +25,7 @@ Upstream has no referential integrity, so the domain layer never discards a reco
 
 ## What is dropped (deliberately)
 
-Only records that cannot be published: `isHidden` results, results with no event id, and results with no parseable rounds (`normalizeResult` returns `null`, silently, without a warning). Everything else is kept.
+Only records that cannot be published: `isHidden` results, results with no event id, and results with no parseable rounds (`normalizeResult` returns `null`; `buildIndex` flags every dropped non-hidden record in a warning). Everything else is kept.
 
 ## Why
 

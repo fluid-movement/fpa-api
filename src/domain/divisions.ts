@@ -40,7 +40,7 @@ const OVERRIDES: Record<string, string> = {
 };
 
 /** Values that are data-entry noise rather than a real division. */
-const UNKNOWN_MARKERS = new Set(['', 'undefined', 'null', 'results', 'test']);
+const UNKNOWN_MARKERS = new Set(['', 'undefined', 'null', 'results', 'test', 'open test']);
 
 export const UNKNOWN_DIVISION = 'Unknown';
 

@@ -91,11 +91,14 @@ function buildSnapshots(manifest: RawManifestResponse): SnapshotRef[] {
 	return Object.values(manifest.manifest ?? {})
 		.filter((entry) => entry.key && entry.isHidden !== true)
 		.map((entry) => {
+			// The division is the series token ('open'), as for live rankings and
+			// ratings. The manifest's divisionName ('Open Pairs') is a display
+			// label that the documented ?division=open filter would never match.
 			const { type, division } = parseSeriesKey(entry.key!.split('_')[0] ?? '');
 			return {
 				key: entry.key!,
 				type,
-				division: entry.divisionName ?? division,
+				division,
 				date: padDate(entry.date),
 				createdAt: entry.createdAt ?? null
 			};
@@ -359,10 +362,18 @@ export function buildIndex(corpus: Corpus): Index {
 
 	// Results first: events need result counts, rankings need result lookups.
 	const results = new Map<string, DivisionResult>();
+	const unusable: string[] = [];
 	for (const [id, raw] of Object.entries(corpus.results.results ?? {})) {
 		if (raw.eventId && withheld.has(raw.eventId)) continue;
 		const normalized = normalizeResult(id, raw, players, canonicalPlayerId);
 		if (normalized) results.set(id, normalized);
+		// Hidden results are unpublished on purpose; anything else is broken data.
+		else if (raw.resultsData?.isHidden !== true) unusable.push(id);
+	}
+	if (unusable.length > 0) {
+		warnings.push(
+			`${unusable.length} result(s) dropped for having no event id or no usable rounds: ${unusable.join(', ')}`
+		);
 	}
 
 	const resultsByEvent = new Map<string, DivisionResult[]>();
