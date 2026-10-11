@@ -11,7 +11,7 @@ scope:
   - src/schemas/**
   - scripts/generate-openapi.ts
   - openapi.json
-confirmed_commit: 3594ceeff269a1222970df21c9a495bec9633e02
+confirmed_commit: 1cfb518ac5408e720b74204602889c756e2bfa72
 ---
 
 Every endpoint is declared with `createRoute()` from `@hono/zod-openapi` and registered with `router.openapi(route, handler)`. The Zod schemas in `src/schemas/` are the single definition for runtime validation, TypeScript types (`c.req.valid('query')` is typed) and the OpenAPI 3.1 document. There is no hand-written spec. See `docs/ARCHITECTURE.md`, section "OpenAPI".

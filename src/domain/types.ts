@@ -18,6 +18,8 @@ export interface Player {
 	/** Withheld unless EXPOSE_PERSONAL_FIELDS is enabled. */
 	membership: number | null;
 	fpaWebsiteId: string | null;
+	/** Legacy website ids of this player and all its aliases, its own first. */
+	fpaWebsiteIds: string[];
 	/** Other upstream GUIDs that resolve to this player. */
 	aliasIds: string[];
 	createdAt: number | null;

@@ -1,0 +1,4 @@
+- [x] Players expose fpaWebsiteIds covering the canonical record and all aliases
+- [x] GET /players?fpaWebsiteId= finds a player whose legacy id sits on an alias
+- [x] openapi.json is regenerated
+- [x] Against live data all 227 legacy profile ids resolve to exactly one player

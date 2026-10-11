@@ -394,6 +394,13 @@
             ],
             "description": "Id of this player on the legacy FPA website"
           },
+          "fpaWebsiteIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every legacy FPA website id of this player, including those carried by duplicate records; its own first"
+          },
           "aliasIds": {
             "type": "array",
             "items": {
@@ -423,6 +430,7 @@
           "gender",
           "membership",
           "fpaWebsiteId",
+          "fpaWebsiteIds",
           "aliasIds",
           "createdAt",
           "lastActive"
@@ -1617,6 +1625,17 @@
             "required": false,
             "description": "3-letter country code",
             "name": "country",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Legacy FPA website id; matches ids carried by duplicate records too",
+              "example": "2422"
+            },
+            "required": false,
+            "description": "Legacy FPA website id; matches ids carried by duplicate records too",
+            "name": "fpaWebsiteId",
             "in": "query"
           },
           {

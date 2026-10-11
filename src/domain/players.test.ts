@@ -36,6 +36,29 @@ describe('buildPlayers', () => {
 		expect(canonicalPlayerId.get('dupe')).toBe('canonical');
 	});
 
+	it('collects legacy website ids from the canonical player and its aliases', () => {
+		// In production 127 of 227 legacy profile ids sit on alias records only.
+		const { players } = buildPlayers({
+			canonical: { ...player('canonical', 'Ryan', 'Young'), fpaWebsiteId: '10' },
+			b: { ...player('b', 'ryan', 'young', 'canonical'), fpaWebsiteId: '30' },
+			a: { ...player('a', 'Ryan', 'Young', 'canonical'), fpaWebsiteId: '20' },
+			same: { ...player('same', 'R', 'Young', 'canonical'), fpaWebsiteId: '10' }
+		});
+
+		expect(players.get('canonical')?.fpaWebsiteId).toBe('10');
+		expect(players.get('canonical')?.fpaWebsiteIds).toEqual(['10', '20', '30']);
+	});
+
+	it('exposes a legacy id that only an alias carries', () => {
+		const { players } = buildPlayers({
+			canonical: player('canonical', 'Ryan', 'Young'),
+			dupe: { ...player('dupe', 'ryan', 'young', 'canonical'), fpaWebsiteId: '2422' }
+		});
+
+		expect(players.get('canonical')?.fpaWebsiteId).toBeNull();
+		expect(players.get('canonical')?.fpaWebsiteIds).toEqual(['2422']);
+	});
+
 	it('follows a multi-step alias chain to its end', () => {
 		// Production currently contains chains up to 3 deep.
 		const { players, canonicalPlayerId } = buildPlayers({

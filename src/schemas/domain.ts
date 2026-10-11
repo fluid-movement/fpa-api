@@ -21,6 +21,11 @@ export const PlayerSchema = z
 		gender: z.string().nullable().describe('Withheld unless EXPOSE_PERSONAL_FIELDS is enabled'),
 		membership: z.number().nullable().describe('Withheld unless EXPOSE_PERSONAL_FIELDS is enabled'),
 		fpaWebsiteId: z.string().nullable().describe('Id of this player on the legacy FPA website'),
+		fpaWebsiteIds: z
+			.array(z.string())
+			.describe(
+				'Every legacy FPA website id of this player, including those carried by duplicate records; its own first'
+			),
 		aliasIds: z.array(z.string()).describe('Duplicate GUIDs that resolve to this player'),
 		createdAt: z.number().nullable(),
 		lastActive: z.number().nullable()

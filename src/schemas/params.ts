@@ -74,6 +74,10 @@ export const EventListQuery = PaginationQuery.extend({
 export const PlayerListQuery = PaginationQuery.extend({
 	q: z.string().optional().openapi({ description: 'Case-insensitive player name search' }),
 	country: z.string().length(3).optional().openapi({ description: '3-letter country code', example: 'ITA' }),
+	fpaWebsiteId: z
+		.string()
+		.optional()
+		.openapi({ description: 'Legacy FPA website id; matches ids carried by duplicate records too', example: '2422' }),
 	hasResults: z
 		.enum(['true', 'false'])
 		.optional()

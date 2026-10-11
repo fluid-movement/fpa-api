@@ -29,13 +29,16 @@ const listRoute = createRoute({
 
 players.openapi(listRoute, (c) => {
 	const index = store.requireIndex();
-	const { q, country, hasResults, limit, offset } = c.req.valid('query');
+	const { q, country, fpaWebsiteId, hasResults, limit, offset } = c.req.valid('query');
 
 	let items = [...index.players.values()];
 
 	if (q) {
 		const needle = q.toLowerCase();
 		items = items.filter((p) => p.fullName.toLowerCase().includes(needle));
+	}
+	if (fpaWebsiteId) {
+		items = items.filter((p) => p.fpaWebsiteIds.includes(fpaWebsiteId));
 	}
 	if (country) {
 		const upper = country.toUpperCase();

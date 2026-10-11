@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:19:40Z
 scope:
   - src/domain/players.ts
-confirmed_commit: 1718de4142a82df247e6eadbe9330bd9d4a3949d
+confirmed_commit: 1cfb518ac5408e720b74204602889c756e2bfa72
 ---
 
 The same person can exist under several upstream GUIDs; a record's `aliasKey` points at its canonical entry (about 508 of 3138 in prod, chains up to 3 deep). `buildPlayers(raw)` in `src/domain/players.ts` resolves every GUID and returns `{ players, canonicalPlayerId, warnings }`.
@@ -19,7 +19,7 @@ The same person can exist under several upstream GUIDs; a record's `aliasKey` po
 - **Loop** (A -> B -> A): the canonical id is the lexicographically smallest id in the cycle (only the cycle, not any tail leading in). Every member picks the same one, so each cycle keeps exactly one player; stopping where the loop was detected would make both disappear. A warning names the cycle.
 - **Dangling alias** (target GUID missing): the record stays canonical itself, with a warning.
 
-Pass 1 fills `canonicalPlayerId` for every GUID (aliases and canonicals). Pass 2 materializes only canonical players; each carries a sorted `aliasIds` list.
+Pass 1 fills `canonicalPlayerId` for every GUID (aliases and canonicals). Pass 2 materializes only canonical players; each carries a sorted `aliasIds` list and `fpaWebsiteIds`, the legacy FPA website ids of the canonical record and all its aliases (its own first, de-duplicated). Upstream often left the legacy id on the duplicate record (127 of the 227 players with a legacy profile), so `fpaWebsiteId` alone hides it. `GET /players?fpaWebsiteId=` matches against `fpaWebsiteIds`.
 
 ## Lookup
 `lookupPlayer(id, players, canonicalPlayerId)` accepts a canonical, alias or unknown GUID and always returns `{ id, fullName, unknown }`. Unknown ids come back as `Unknown Player` with `unknown: true` (original id kept), which [Results parsing](/components/results-parsing.md) uses so team members are never dropped; the [Index builder](/components/index-builder.md) then counts them in a warning. Player lookups by alias GUID go through `Index.canonicalPlayerId`.

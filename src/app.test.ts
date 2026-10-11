@@ -38,7 +38,8 @@ const fixture: Corpus = {
 		players: {
 			p1: { key: 'p1', firstName: 'Ryan', lastName: 'Young', country: 'USA' },
 			p2: { key: 'p2', firstName: 'James', lastName: 'Wiseman', country: 'USA' },
-			dupe: { key: 'dupe', firstName: 'ryan', lastName: 'young', aliasKey: 'p1' }
+			// The legacy website id sits on the duplicate, as it does in production.
+			dupe: { key: 'dupe', firstName: 'ryan', lastName: 'young', aliasKey: 'p1', fpaWebsiteId: '2422' }
 		}
 	},
 	events: {
@@ -161,6 +162,13 @@ describe('GET /players', () => {
 		expect((await get('/players?q=wiseman')).body.total).toBe(1);
 		expect((await get('/players?country=USA')).body.total).toBe(2);
 		expect((await get('/players?country=GER')).body.total).toBe(0);
+	});
+
+	it('finds a player by a legacy website id carried by a duplicate record', async () => {
+		const { body } = await get('/players?fpaWebsiteId=2422');
+		expect(body.total).toBe(1);
+		expect(body.items[0]).toMatchObject({ id: 'p1', fpaWebsiteIds: ['2422'] });
+		expect((await get('/players?fpaWebsiteId=1')).body.total).toBe(0);
 	});
 });
 

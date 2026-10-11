@@ -113,6 +113,7 @@ export function buildPlayers(raw: Record<string, RawPlayer>): ResolvedPlayers {
 			gender: config.exposePersonalFields ? (entry.gender ?? null) : null,
 			membership: config.exposePersonalFields ? (entry.membership ?? null) : null,
 			fpaWebsiteId: entry.fpaWebsiteId ?? null,
+			fpaWebsiteIds: legacyIds(id, aliasIds.get(id) ?? [], raw),
 			aliasIds: (aliasIds.get(id) ?? []).sort(),
 			createdAt: entry.createdAt ?? null,
 			lastActive: entry.lastActive ?? null
@@ -120,6 +121,18 @@ export function buildPlayers(raw: Record<string, RawPlayer>): ResolvedPlayers {
 	}
 
 	return { players, canonicalPlayerId, warnings };
+}
+
+/**
+ * Every legacy website id of a player, the canonical record's own first. When
+ * duplicates were merged upstream, the legacy id often stayed on the alias
+ * record, so the canonical record alone would hide it.
+ */
+function legacyIds(id: string, aliases: string[], raw: Record<string, RawPlayer>): string[] {
+	const ids = [id, ...[...aliases].sort()]
+		.map((key) => raw[key]?.fpaWebsiteId)
+		.filter((value): value is string => Boolean(value));
+	return [...new Set(ids)];
 }
 
 /**
