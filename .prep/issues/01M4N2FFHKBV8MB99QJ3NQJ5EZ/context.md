@@ -1,0 +1,1 @@
+Inputs: the dump analysis in the findings of 01M4N2FFB70GV9SE7V23AVT651, the read-only in-memory design in [In-memory read model](/decisions/in-memory-read-model.md), and fpa-events, which already runs SvelteKit with Better Auth and Drizzle on Postgres. Deployment target: Coolify on Hetzner, protected by Hetzner whole-disk backups.
