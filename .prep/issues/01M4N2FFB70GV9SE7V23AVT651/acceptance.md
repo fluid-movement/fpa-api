@@ -1,0 +1,3 @@
+- [x] Profile tables and fields identified with fill rates
+- [x] Legacy-to-upstream player mapping verified against live data
+- [x] Import risks listed (duplicates, personal data, encoding, media)

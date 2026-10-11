@@ -1,0 +1,1 @@
+Question: where does the legacy WordPress dump keep player profile data, how do legacy players map to upstream players ([Player alias resolution](/features/player-identity.md)), and what condition is the data in. Answered when the profile tables and fields are identified, the player mapping is verified against live data, and the risks for the import are listed.
