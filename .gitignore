@@ -32,3 +32,6 @@ data/
 
 # build output
 dist/
+
+# local database dumps (personal data, never commit)
+*.sql
