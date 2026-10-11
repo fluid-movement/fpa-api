@@ -1,0 +1,1 @@
+- [x] UI, storage, data flow and repository layout are decided

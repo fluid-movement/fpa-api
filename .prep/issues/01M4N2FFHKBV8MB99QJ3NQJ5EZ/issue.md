@@ -11,7 +11,3 @@ tags:
 Decide where the editing UI lives (Hono inside fpa-api, a separate SvelteKit app, or an admin area in fpa-events), where enrichment data is stored, and how fpa-api reads it. Authentication uses Better Auth.
 
 ## Open questions
-
-- Which of the three UI options?
-- Where does the data live, and does fpa-api pull it as another source or read it directly?
-- Same repository (pnpm workspace) or a separate one?
