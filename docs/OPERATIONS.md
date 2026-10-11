@@ -60,6 +60,10 @@ See [`.env.example`](../.env.example). At minimum set `REFRESH_TOKEN` (otherwise
 disabled) and `CORS_ORIGINS` if browsers will call this directly. `PORT` and `SNAPSHOT_PATH` are
 already set correctly by the image.
 
+To serve player profiles, set `PROFILES_URL` to fpa-profiles' base URL (its `/export` is pulled with
+every full refresh), and give fpa-profiles this service's `REFRESH_TOKEN` as its
+`FPA_API_REFRESH_TOKEN` so a saved profile is public immediately. Unset, profiles are disabled.
+
 ### Running it anywhere else
 
 ```bash

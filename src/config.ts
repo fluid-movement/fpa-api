@@ -36,6 +36,12 @@ export const config = {
 		judging: env('UPSTREAM_JUDGING', 'https://xf4cu1wy10.execute-api.us-west-2.amazonaws.com/production')
 	},
 
+	/**
+	 * Base URL of fpa-profiles, whose `GET /export` supplies player profile
+	 * enrichment. Unset disables the profiles source; it is optional data.
+	 */
+	profilesUrl: process.env.PROFILES_URL?.trim().replace(/\/+$/, '') || null,
+
 	/** How long a single upstream request may take before we give up on it. */
 	requestTimeoutMs: intEnv('REQUEST_TIMEOUT_MS', 30 * SECOND),
 

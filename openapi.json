@@ -442,6 +442,9 @@
           "player": {
             "$ref": "#/components/schemas/Player"
           },
+          "profile": {
+            "$ref": "#/components/schemas/PlayerEnrichment"
+          },
           "stats": {
             "$ref": "#/components/schemas/PlayerStats"
           },
@@ -469,10 +472,74 @@
         },
         "required": [
           "player",
+          "profile",
           "stats",
           "rankings",
           "ratings",
           "placements"
+        ]
+      },
+      "PlayerEnrichment": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProfileLink"
+                  }
+                }
+              ]
+            },
+            "description": "Profile fields by key, e.g. nickname, headline, bio (Markdown), playingSince, howStarted, careerHighlights, favoriteMove, mentors, partners, hobbies, media, sponsors, links. New keys can appear at any time; a value is text, a list of names, or a list of links. Empty fields are absent."
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the profile was last edited (ISO 8601)"
+          }
+        },
+        "required": [
+          "fields",
+          "updatedAt"
+        ],
+        "description": "Profile enrichment edited in fpa-profiles (bio, nickname, links and similar), or null when there is none"
+      },
+      "ProfileLink": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "website, sponsor, social or other; new kinds may appear"
+          },
+          "url": {
+            "type": "string",
+            "description": "http(s) URL"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "url"
         ]
       },
       "PlayerStats": {

@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:16:58Z
 ---
 
-fpa-api is a read-only REST API (TypeScript, Hono with `@hono/zod-openapi`, Node 22, pnpm 11) over the freestyle frisbee community's judging, results and rankings data. Upstream is five independent AWS microservices (players, events, results, points, judging) with no shared query layer, no referential integrity and no cache headers. The whole corpus is about 5 MB, so the service fetches everything, builds an immutable in-memory `Index` and serves every request from RAM. Its value is the normalization: duplicate players merged through alias chains, dirty division names canonicalized, ranking points joined back to the events that produced them, and broken references flagged instead of dropped.
+fpa-api is a read-only REST API (TypeScript, Hono with `@hono/zod-openapi`, Node 22, pnpm 11) over the freestyle frisbee community's judging, results and rankings data. Upstream is five independent AWS microservices (players, events, results, points, judging) with no shared query layer, no referential integrity and no cache headers. The whole corpus is about 5 MB, so the service fetches everything, builds an immutable in-memory `Index` and serves every request from RAM. Player profile content (bio, nickname, links) comes from a sibling app, fpa-profiles, whose export is pulled the same way. Its value is the normalization: duplicate players merged through alias chains, dirty division names canonicalized, ranking points joined back to the events that produced them, and broken references flagged instead of dropped.
 
 The code is layered. `src/upstream/` fetches raw payloads without interpreting them; `src/domain/` turns them into the `Index` with pure, synchronous functions; `src/store/` holds the current Index, swaps it atomically, runs tiered refreshes and persists the last good raw corpus to disk; `src/routes/` are thin `createRoute()` handlers whose Zod schemas in `src/schemas/` double as the OpenAPI spec committed in `openapi.json`.
 
@@ -18,7 +18,7 @@ The code is layered. `src/upstream/` fetches raw payloads without interpreting t
 
 **Upstream and its data:** [Upstream fetch layer](/components/upstream.md) · [Degrade and flag, never drop](/conventions/degrade-and-flag.md) · [Team points and round numbering](/pitfalls/points-and-rounds.md) · [Withholding in-progress events](/features/in-progress-event-gating.md)
 
-**Domain normalization and the Index:** [Index builder](/components/index-builder.md) · [Player alias resolution](/features/player-identity.md) · [Division normalization](/features/division-normalization.md) · [Results parsing](/components/results-parsing.md) · [Rankings, ratings and snapshots](/features/rankings-and-ratings.md)
+**Domain normalization and the Index:** [Index builder](/components/index-builder.md) · [Player alias resolution](/features/player-identity.md) · [Division normalization](/features/division-normalization.md) · [Results parsing](/components/results-parsing.md) · [Rankings, ratings and snapshots](/features/rankings-and-ratings.md) · [Player profiles from fpa-profiles](/features/player-profiles.md)
 
 **Store, refresh and persistence:** [Store](/components/store.md) · [Tiered refresh](/features/refresh-tiers.md) · [Snapshot persistence](/components/snapshot-persistence.md) · [In-memory read model, no database, no writes](/decisions/in-memory-read-model.md)
 

@@ -67,7 +67,8 @@ replaces the old reference in a single assignment. A request sees either the who
 whole new one — never a half-rebuilt mix. This is why the index is immutable and rebuilt wholesale
 rather than mutated in place.
 
-**2. A failed refresh never destroys good data.** The six sources are fetched in parallel but
+**2. A failed refresh never destroys good data.** The upstream sources, plus the optional
+fpa-profiles export (our own player profile data), are fetched in parallel but
 tolerate individual failure, so one flaky service does not block the other four. Any source that
 failed carries over its previous payload. If the three core sources (players, events, results) are
 unavailable *and* there is no prior data, the refresh aborts and the old index keeps serving.

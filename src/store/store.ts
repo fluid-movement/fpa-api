@@ -5,6 +5,7 @@ import {
 	type EventLockState
 } from '../domain/index-builder.js';
 import type { Index } from '../domain/types.js';
+import { config } from '../config.js';
 import { sources } from '../upstream/sources.js';
 import type { RawDirectoryResponse } from '../upstream/types.js';
 import { loadSnapshot, saveSnapshot } from './snapshot.js';
@@ -16,7 +17,8 @@ export type SourceName =
 	| 'manifest'
 	| 'points'
 	| 'directory'
-	| 'judging';
+	| 'judging'
+	| 'profiles';
 
 export interface SourceStatus {
 	lastSuccessAt: number | null;
@@ -82,7 +84,9 @@ export class Store {
 		manifest: emptyStatus(),
 		points: emptyStatus(),
 		directory: emptyStatus(),
-		judging: emptyStatus()
+		judging: emptyStatus(),
+		// Stays empty while PROFILES_URL is unset: the source is disabled.
+		profiles: emptyStatus()
 	};
 
 	get index(): Index | null {
@@ -185,7 +189,7 @@ export class Store {
 
 		// Fetch in parallel but tolerate individual failures, so one flaky
 		// service does not block a refresh of the other four.
-		const [players, events, results, manifest, points, directory] = await Promise.all([
+		const [players, events, results, manifest, points, directory, profiles] = await Promise.all([
 			sources.players().then(
 				(v) => (this.#record('players', null), v),
 				(e) => (this.#record('players', e), null)
@@ -209,7 +213,14 @@ export class Store {
 			sources.directory().then(
 				(v) => (this.#record('directory', null), v),
 				(e) => (this.#record('directory', e), null)
-			)
+			),
+			// Optional, and ours rather than upstream's: fpa-profiles' export.
+			config.profilesUrl
+				? sources.profiles().then(
+						(v) => (this.#record('profiles', null), v),
+						(e) => (this.#record('profiles', e), null)
+					)
+				: Promise.resolve(null)
 		]);
 
 		const previous = this.#corpus;
@@ -252,7 +263,10 @@ export class Store {
 			manifest: manifest ?? previous?.manifest ?? {},
 			points: points ?? previous?.points ?? {},
 			directory: directory ?? previous?.directory ?? null,
-			liveLocks
+			liveLocks,
+			// Disabling the source drops the profiles rather than serving a
+			// stale copy forever.
+			profiles: config.profilesUrl ? (profiles ?? previous?.profiles ?? null) : null
 		};
 
 		try {

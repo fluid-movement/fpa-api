@@ -7,12 +7,14 @@ import type {
 	RawPlayersResponse,
 	RawPointsResponse,
 	RawPointsSnapshotResponse,
+	RawProfilesExport,
 	RawRankingEntry,
 	RawRatingEntry,
 	RawResultsResponse
 } from '../upstream/types.js';
 import { normalizeDivision, parseSeriesKey } from './divisions.js';
 import { buildPlayers } from './players.js';
+import { buildProfiles } from './profiles.js';
 import { normalizeResult } from './results.js';
 import type {
 	DivisionResult,
@@ -46,6 +48,8 @@ export interface Corpus {
 	 * treated differently from an observed unlocked pool. See `findInProgress`.
 	 */
 	liveLocks?: Record<string, EventLockState>;
+	/** fpa-profiles' export; absent when the profiles source is disabled or never fetched. */
+	profiles?: RawProfilesExport | null;
 }
 
 export interface EventLockState {
@@ -447,6 +451,9 @@ export function buildIndex(corpus: Corpus): Index {
 	const pointsSeries = buildPointsSeries(corpus.points, results, canonicalPlayerId);
 	warnings.push(...pointsSeries.warnings);
 
+	const profiles = buildProfiles(corpus.profiles, players, canonicalPlayerId);
+	warnings.push(...profiles.warnings);
+
 	return {
 		builtAt: Date.now(),
 		players,
@@ -465,6 +472,7 @@ export function buildIndex(corpus: Corpus): Index {
 					modifiedAt: liveEntry.modifiedAt ?? null
 				}
 			: null,
+		profiles: profiles.profiles,
 		warnings
 	};
 }

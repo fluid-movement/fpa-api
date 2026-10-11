@@ -1,0 +1,7 @@
+- [x] With PROFILES_URL set, the full refresh and POST /refresh fetch /export; a failure carries the previous export forward and shows on /health
+- [x] Profiles are validated by value shape (text, name list, link list), not by key; invalid values and envelopes are dropped and flagged
+- [x] Stored player ids resolve through the alias map; profiles whose player is gone are flagged; two profiles landing on one player keep the newest and flag it
+- [x] GET /players/{id} returns profile fields and updatedAt, or null; requesting by alias id shows the same profile
+- [x] The export is part of the persisted snapshot
+- [x] openapi.json, README, docs and knowledge entries are updated
+- [x] End-to-end: an edit saved in fpa-profiles appears on fpa-api /players/{id} after a refresh

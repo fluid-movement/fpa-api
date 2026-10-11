@@ -94,7 +94,7 @@ rather than dropped. `GET /health` lists every data-quality problem found in the
 | `GET /events/{id}` | One event plus all its results |
 | `GET /events/{id}/results` | Just the results |
 | `GET /players` | Canonical player directory |
-| `GET /players/{id}` | Profile, career stats, standings, every placement |
+| `GET /players/{id}` | Profile (bio, nickname, links… from fpa-profiles), career stats, standings, every placement |
 | `GET /rankings` | Season standings by tournament points |
 | `GET /rankings/series` | Available ranking series |
 | `GET /ratings` | Elo-style strength ratings |
@@ -130,6 +130,7 @@ that matter:
 | `EXPOSE_PERSONAL_FIELDS` | `false` | Include player gender and FPA membership number |
 | `FULL_REFRESH_INTERVAL_MS` | `3600000` | Full corpus refresh floor |
 | `SNAPSHOT_PATH` | `./data/snapshot.json` | Last-good corpus, for surviving restarts |
+| `PROFILES_URL` | *(unset)* | Base URL of [fpa-profiles](https://github.com/fluid-movement/fpa-profiles), whose `/export` supplies player profiles. Unset disables profiles. |
 
 The five upstream base URLs are also env vars (`UPSTREAM_PLAYERS`, `UPSTREAM_EVENTS`,
 `UPSTREAM_RESULTS`, `UPSTREAM_POINTS`, `UPSTREAM_JUDGING`). They are third-party AWS API Gateway

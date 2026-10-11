@@ -183,8 +183,24 @@ export interface PlayerRating {
 	peakRatingDate: string | null;
 }
 
+/** A value of one profile field, as fpa-profiles exports it. */
+export type ProfileFieldValue = string | string[] | ProfileLink[];
+
+export interface ProfileLink {
+	kind: string;
+	url: string;
+	label?: string;
+}
+
+/** Profile enrichment for one canonical player, from fpa-profiles. */
+export interface PlayerEnrichment {
+	fields: Record<string, ProfileFieldValue>;
+	updatedAt: string | null;
+}
+
 export interface PlayerProfile {
 	player: Player;
+	profile: PlayerEnrichment | null;
 	stats: PlayerStats;
 	rankings: PlayerRanking[];
 	ratings: PlayerRating[];
@@ -214,6 +230,8 @@ export interface Index {
 	ratings: Map<string, RatingSeries>;
 	snapshots: SnapshotRef[];
 	live: LiveEvent | null;
+	/** Profile enrichment by canonical player id. */
+	profiles: Map<string, PlayerEnrichment>;
 	/** Non-fatal problems found while normalizing. Surfaced on /health. */
 	warnings: string[];
 }

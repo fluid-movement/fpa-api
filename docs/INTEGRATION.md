@@ -94,6 +94,22 @@ event date), and a full `placements` timeline.
 
 ---
 
+## Player profiles
+
+`GET /players/{id}` carries `profile`: `{ fields, updatedAt }`, or `null` when nobody has written one.
+The fields are edited in fpa-profiles and seeded from the old FPA WordPress site. Render each field
+by its value shape rather than a fixed list of keys, because new fields can appear without an API
+release:
+
+- a **string** is text; `bio` is Markdown, so render it as Markdown (sanitized);
+- a **list of strings** is a list of names;
+- a **list of `{ kind, url, label? }`** is links (`kind` is `website`, `sponsor`, `social` or `other`;
+  fall back to the URL's host when there is no label).
+
+Known keys today: `nickname`, `headline`, `bio`, `playingSince`, `howStarted`, `careerHighlights`,
+`favoriteMove`, `mentors`, `partners`, `hobbies`, `media`, `sponsors`, `links`. Empty fields are
+absent, so hide a section when its key is missing.
+
 ## Rendering rules
 
 These come from real quirks in the data. Getting them wrong produces output that is subtly and

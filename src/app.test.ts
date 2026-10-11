@@ -88,7 +88,13 @@ const fixture: Corpus = {
 			]
 		}
 	},
-	directory: null
+	directory: null,
+	// fpa-profiles' export, stored under an id that is now an alias of p1.
+	profiles: {
+		version: 1,
+		generatedAt: '2026-10-11T12:00:00.000Z',
+		profiles: [{ playerId: 'dupe', updatedAt: '2026-10-11T11:58:00.000Z', fields: { nickname: 'Laerbs' } }]
+	}
 };
 
 const app = createApp();
@@ -188,6 +194,13 @@ describe('GET /players/:playerId', () => {
 		const { status, body } = await get('/players/dupe');
 		expect(status).toBe(200);
 		expect(body.player.id).toBe('p1');
+	});
+
+	it('includes the profile enrichment, whichever of the player ids is requested', async () => {
+		const expected = { fields: { nickname: 'Laerbs' }, updatedAt: '2026-10-11T11:58:00.000Z' };
+		expect((await get('/players/p1')).body.profile).toEqual(expected);
+		expect((await get('/players/dupe')).body.profile).toEqual(expected);
+		expect((await get('/players/p2')).body.profile).toBeNull();
 	});
 
 	it('404s for an unknown player', async () => {

@@ -7,6 +7,23 @@
  * do when a field is missing. Never widen these into guarantees.
  */
 
+/**
+ * fpa-profiles' `GET /export`. Ours rather than upstream's, but just as
+ * untrusted at this boundary: every field is optional until the domain layer
+ * has checked it.
+ */
+export interface RawProfilesExport {
+	version?: number;
+	generatedAt?: string;
+	profiles?: RawExportedProfile[];
+}
+
+export interface RawExportedProfile {
+	playerId?: string;
+	updatedAt?: string;
+	fields?: Record<string, unknown>;
+}
+
 export interface RawPlayer {
 	key?: string;
 	firstName?: string;

@@ -13,7 +13,7 @@ confirmed_commit: 3594ceeff269a1222970df21c9a495bec9633e02
 ---
 
 ## Decision
-The whole upstream corpus (~5 MB raw) is held in memory as an immutable `Index` built by `buildIndex()` in `src/domain/index-builder.ts`. The service has no database and never writes to upstream; its only write is the local snapshot file. `docs/ARCHITECTURE.md` ("The shape of the problem", "Deliberate non-goals") gives the long form.
+The whole upstream corpus (~5 MB raw) is held in memory as an immutable `Index` built by `buildIndex()` in `src/domain/index-builder.ts`. The service has no database and never writes to upstream; its only write is the local snapshot file. Data that is ours to edit (player profiles) lives in a separate app with its own database, fpa-profiles, and is pulled read-only like any source ([Player profiles](/features/player-profiles.md)). `docs/ARCHITECTURE.md` ("The shape of the problem", "Deliberate non-goals") gives the long form.
 
 ## Why
 - The data set is small and changes slowly, so a full in-RAM join (players, events, results, rankings) answers every request without upstream calls. Upstream load is therefore independent of our traffic.

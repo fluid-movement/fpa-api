@@ -30,6 +30,7 @@ fpa-events (SvelteKit) is the one known consumer. Full guide: `docs/INTEGRATION.
 - Round 1 is the final; rounds count backwards and are not contiguous; use `roundName`.
 - Render `unknown: true` team members as "Unknown Player" rather than filtering them ([Degrade and flag](/conventions/degrade-and-flag.md)).
 - Always show `matchCount` beside a rating.
+- Render `profile.fields` on player pages by value shape, not by a fixed key list: string as text (`bio` as sanitized Markdown), string list as names, `{ kind, url, label? }` list as links; hide missing keys. See [Player profiles](/features/player-profiles.md).
 
 ## Caching and freshness
 

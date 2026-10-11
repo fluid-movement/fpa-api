@@ -218,9 +218,34 @@ export const PlayerRatingSchema = z
 	})
 	.openapi('PlayerRating');
 
+export const ProfileLinkSchema = z
+	.object({
+		kind: z.string().describe('website, sponsor, social or other; new kinds may appear'),
+		url: z.string().describe('http(s) URL'),
+		label: z.string().optional()
+	})
+	.openapi('ProfileLink');
+
+export const PlayerEnrichmentSchema = z
+	.object({
+		fields: z
+			.record(z.string(), z.union([z.string(), z.array(z.string()), z.array(ProfileLinkSchema)]))
+			.describe(
+				'Profile fields by key, e.g. nickname, headline, bio (Markdown), playingSince, howStarted, ' +
+					'careerHighlights, favoriteMove, mentors, partners, hobbies, media, sponsors, links. ' +
+					'New keys can appear at any time; a value is text, a list of names, or a list of links. ' +
+					'Empty fields are absent.'
+			),
+		updatedAt: z.string().nullable().describe('When the profile was last edited (ISO 8601)')
+	})
+	.openapi('PlayerEnrichment');
+
 export const PlayerProfileSchema = z
 	.object({
 		player: PlayerSchema,
+		profile: PlayerEnrichmentSchema.nullable().describe(
+			'Profile enrichment edited in fpa-profiles (bio, nickname, links and similar), or null when there is none'
+		),
 		stats: PlayerStatsSchema,
 		rankings: z
 			.array(PlayerRankingSchema)

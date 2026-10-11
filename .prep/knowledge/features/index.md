@@ -8,5 +8,6 @@
 * [Withholding in-progress events](/features/in-progress-event-gating.md) - Events are withheld until every judging pool is locked; CONSUME_IN_PROGRESS_EVENTS overrides
 * [Personal data withholding](/features/personal-data.md) - Gender and membership number are withheld unless EXPOSE_PERSONAL_FIELDS is true
 * [Player alias resolution](/features/player-identity.md) - Canonical players from `aliasKey` chains, loop- and dangling-safe, and lookup by any alias GUID
+* [Player profiles from fpa-profiles](/features/player-profiles.md) - How player profile enrichment (bio, nickname, links…) is pulled from fpa-profiles' export, validated by value shape, resolved to canonical players, and served on GET /players/{id}
 * [Rankings, ratings and snapshots](/features/rankings-and-ratings.md) - Tournament-point rankings vs Elo ratings, joining points to events, series, and on-demand historical snapshots
 * [Tiered refresh](/features/refresh-tiers.md) - Directory and manifest probes escalating to full refreshes, the hourly floor, and token-protected `POST /refresh`

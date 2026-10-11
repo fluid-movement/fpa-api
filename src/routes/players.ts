@@ -156,6 +156,7 @@ players.openapi(profileRoute, (c) => {
 	return c.json(
 		{
 			player,
+			profile: index.profiles.get(canonicalId) ?? null,
 			stats: computeStats(index, canonicalId),
 			rankings: currentRankings(index, canonicalId),
 			ratings: currentRatings(index, canonicalId),

@@ -1,0 +1,4 @@
+- Source: `sources.profiles()` fetches `${PROFILES_URL}/export` (fpa-profiles); `Corpus.profiles` holds the raw export, carried over on failure ([Store](/components/store.md), [Snapshot persistence](/components/snapshot-persistence.md)).
+- Domain: `src/domain/profiles.ts` validates and resolves it into `Index.profiles` ([Index builder](/components/index-builder.md), [Player alias resolution](/features/player-identity.md), [Degrade and flag](/conventions/degrade-and-flag.md)).
+- API: `profile` on `PlayerProfileSchema` and the `GET /players/{id}` handler ([Defining routes and schemas](/conventions/routes-and-schemas.md)).
+- Contract: version 1 envelope `{ version, generatedAt, profiles: [{ playerId, updatedAt, fields }] }`; field values are a string, a string list, or a list of `{ kind, url, label? }`.

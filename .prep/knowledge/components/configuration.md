@@ -29,6 +29,7 @@ All runtime configuration is read once at import time into the `config` object i
 | `EXPOSE_PERSONAL_FIELDS` | false | Only the literal `true` enables gender and membership |
 | `CONSUME_IN_PROGRESS_EVENTS` | false | Only the literal `true` consumes unlocked events |
 | `CORS_ORIGINS` | empty | Comma-separated allowlist |
+| `PROFILES_URL` | unset | fpa-profiles base URL; unset disables [player profiles](/features/player-profiles.md) |
 
 ## Behaviours worth knowing
 

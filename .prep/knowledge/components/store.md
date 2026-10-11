@@ -15,7 +15,7 @@ confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
 
 ## Invariants
 - **Atomic swap.** `#index` and `#corpus` are replaced together only after `buildIndex(corpus)` succeeds. If the build throws, the previous index is kept and `refresh()` returns `false`.
-- **Failure never destroys data.** `#doRefresh` fetches players, events, results, manifest, points and directory in parallel via `sources.*` (`src/upstream/sources.ts`), each tolerant of failure. A failed source takes the same field from the previous corpus. If a core source (players, events, results) has neither a fresh nor a carried value, the refresh returns `false` and nothing changes.
+- **Failure never destroys data.** `#doRefresh` fetches players, events, results, manifest, points, directory and (when `PROFILES_URL` is set) the fpa-profiles export in parallel via `sources.*` (`src/upstream/sources.ts`), each tolerant of failure. A failed source takes the same field from the previous corpus. If a core source (players, events, results) has neither a fresh nor a carried value, the refresh returns `false` and nothing changes.
 - **Honest freshness.** `coreFetched` is true only when all three core sources were fetched this time. Only then do `fetchedAt`, `lastFullRefreshAt` and `origin = 'network'` advance and the snapshot get rewritten. A carried-over build sets `origin = 'snapshot'`, leaves `lastFullRefreshAt` alone, skips the snapshot write and returns `false`, so a full outage does not look healthy.
 
 ## Shared in-flight refresh

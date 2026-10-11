@@ -9,6 +9,7 @@ import type {
 	RawPlayersResponse,
 	RawPointsResponse,
 	RawPointsSnapshotResponse,
+	RawProfilesExport,
 	RawResultsResponse
 } from './types.js';
 
@@ -48,6 +49,12 @@ export const sources = {
 		fetchJson<RawPointsSnapshotResponse>(
 			`${config.upstream.points}/downloadPointsData/${encodeURIComponent(key)}`
 		),
+
+	/**
+	 * Player profile enrichment from fpa-profiles. Only called when
+	 * `PROFILES_URL` is set; see `config.profilesUrl`.
+	 */
+	profiles: () => fetchJson<RawProfilesExport>(`${config.profilesUrl}/export`),
 
 	/** 135 bytes. Which event, if any, is being judged right now. */
 	directory: () =>
