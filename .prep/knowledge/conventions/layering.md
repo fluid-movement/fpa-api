@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:19:39Z
 scope:
   - src/**
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 3594ceeff269a1222970df21c9a495bec9633e02
 ---
 
 The code is split into four layers with one-way dependencies. Keeping logic in the right layer is what lets the tests run with no network and the whole read path serve from RAM.
@@ -20,7 +20,7 @@ The code is split into four layers with one-way dependencies. Keeping logic in t
 | Store | `src/store/` | Holds the current `Index`, swaps it atomically, schedules refreshes and persists the snapshot. The only layer that combines upstream with domain. See [Store](/components/store.md). |
 | Routes | `src/routes/`, `src/schemas/` | Thin `createRoute()` handlers: validate, look up in `store.index`, paginate, shape. They never derive new facts. See [Routes and schemas](/conventions/routes-and-schemas.md). |
 
-`src/lib/` holds shared helpers (`http.ts` errors and pagination, `matching.ts` fuzzy scoring) that are pure and layer-neutral.
+`src/lib/` holds shared helpers (`http.ts` errors and pagination, `matching.ts` fuzzy scoring, `auth.ts` token comparison) that are pure and layer-neutral.
 
 ## Why
 

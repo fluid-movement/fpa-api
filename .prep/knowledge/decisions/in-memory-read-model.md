@@ -9,7 +9,7 @@ generated:
 scope:
   - src/store/**
   - src/domain/index-builder.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 3594ceeff269a1222970df21c9a495bec9633e02
 ---
 
 ## Decision

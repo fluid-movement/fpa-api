@@ -10,7 +10,7 @@ scope:
   - src/**/*.test.ts
   - vitest.config.ts
   - .github/workflows/**
-confirmed_commit: b62738e757d69710285a66d77a2b4f5d25704d7d
+confirmed_commit: 3594ceeff269a1222970df21c9a495bec9633e02
 ---
 
 `pnpm test` runs `vitest run` (config in `vitest.config.ts`: node environment, `src/**/*.test.ts`). Tests are colocated with the code they cover and never touch the network.
@@ -22,6 +22,8 @@ confirmed_commit: b62738e757d69710285a66d77a2b4f5d25704d7d
 - `src/domain/results.test.ts`: round/pool parsing, malformed structures, hidden records.
 - `src/domain/index-builder.test.ts`: joins, stub events, rankings/ratings split.
 - `src/lib/matching.test.ts`: fuzzy scoring; refusing confidence for same-name-different-year.
+- `src/lib/auth.test.ts`: constant-time token comparison.
+- `src/store/snapshot.test.ts`: snapshot round-trip and every unusable-file case, against a temporary `SNAPSHOT_PATH` set with `vi.stubEnv` plus `vi.resetModules()` (config is read at import).
 - `src/store/store.test.ts`: refresh behaviour, with upstream replaced via `vi.mock('../upstream/sources.js', ...)` and `mockResolvedValue` fetchers.
 - `src/app.test.ts`: the HTTP contract (status codes, error shape, pagination, validation).
 
