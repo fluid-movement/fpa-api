@@ -11,7 +11,7 @@ scope:
   - src/routes/rankings.ts
   - src/routes/ratings.ts
   - src/routes/snapshots.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 1718de4142a82df247e6eadbe9330bd9d4a3949d
 ---
 
 Rankings and ratings are different data and are kept in separate maps on the `Index`: `rankings` and `ratings`, keyed by series name (`ranking-open`, `rating-women`, ...). `buildPointsSeries(points, results)` in `src/domain/index-builder.ts` builds both; the series prefix decides which via `parseSeriesKey` ([Division normalization](/features/division-normalization.md)).
@@ -29,5 +29,5 @@ Elo-style strength estimate, no breakdown. Entries lacking `id` or a numeric `ra
 `Index.snapshots` lists manifest entries (hidden ones dropped). `GET /snapshots/{key}` in `src/routes/snapshots.ts` fetches the snapshot from upstream on demand (about 100 exist, rarely read), reshapes it with `snapshotToPoints` (a bare array keyed by the series part of the snapshot key), and runs the same `buildPointsSeries` against the current `index.results`, so shapes match the live feed. Upstream failure -> 503. Breakdown event fields may be null for old snapshots whose results are gone. See [Upstream](/components/upstream.md).
 
 ## Gaps
-- `playerId` is the raw upstream id, not alias-resolved (`index-builder.ts:140,165`).
+- `playerId` is the canonical id: `buildPointsSeries(points, results, canonicalPlayerId)` resolves alias GUIDs, and warns when a series lists one player twice under different aliases.
 - Snapshot `division` uses the manifest's `divisionName` verbatim when present, else the series token (`index-builder.ts:98`); it is not normalized.

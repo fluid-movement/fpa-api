@@ -175,6 +175,57 @@ describe('buildIndex', () => {
 		expect(index.warnings.some((w) => w.includes('skipped'))).toBe(true);
 	});
 
+	it('resolves alias ids in rankings and ratings to the canonical player', () => {
+		// Upstream ranks a player under whichever GUID they were entered with,
+		// duplicates included. Profiles look entries up by canonical id.
+		const index = buildIndex(
+			corpus({
+				players: {
+					players: {
+						p1: { key: 'p1', firstName: 'Ryan', lastName: 'Young' },
+						dupe: { key: 'dupe', firstName: 'ryan', lastName: 'young', aliasKey: 'p1' }
+					}
+				},
+				points: {
+					data: {
+						'ranking-open': [{ id: 'dupe', fullName: 'Ryan Young', rank: 1, points: 10 }],
+						'rating-open': [{ id: 'dupe', fullName: 'Ryan Young', rating: 1500, matchCount: 10 }]
+					}
+				}
+			})
+		);
+
+		expect(index.rankings.get('ranking-open')!.entries[0]!.playerId).toBe('p1');
+		expect(index.ratings.get('rating-open')!.entries[0]!.playerId).toBe('p1');
+		expect(index.warnings.some((w) => w.includes('more than once'))).toBe(false);
+	});
+
+	it('keeps and flags a series that ranks one player under two alias ids', () => {
+		const index = buildIndex(
+			corpus({
+				players: {
+					players: {
+						p1: { key: 'p1', firstName: 'Ryan', lastName: 'Young' },
+						dupe: { key: 'dupe', firstName: 'ryan', lastName: 'young', aliasKey: 'p1' }
+					}
+				},
+				points: {
+					data: {
+						'ranking-open': [
+							{ id: 'p1', fullName: 'Ryan Young', rank: 1, points: 10 },
+							{ id: 'dupe', fullName: 'Ryan Young', rank: 2, points: 5 }
+						]
+					}
+				}
+			})
+		);
+
+		expect(index.rankings.get('ranking-open')!.entries.map((e) => e.playerId)).toEqual(['p1', 'p1']);
+		expect(
+			index.warnings.some((w) => w.includes('"ranking-open" lists player p1 more than once'))
+		).toBe(true);
+	});
+
 	it('normalizes and sorts snapshot references, excluding hidden ones', () => {
 		const index = buildIndex(
 			corpus({

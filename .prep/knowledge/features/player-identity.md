@@ -8,7 +8,7 @@ generated:
   at: 2026-10-11T08:19:40Z
 scope:
   - src/domain/players.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+confirmed_commit: 1718de4142a82df247e6eadbe9330bd9d4a3949d
 ---
 
 The same person can exist under several upstream GUIDs; a record's `aliasKey` points at its canonical entry (about 508 of 3138 in prod, chains up to 3 deep). `buildPlayers(raw)` in `src/domain/players.ts` resolves every GUID and returns `{ players, canonicalPlayerId, warnings }`.
@@ -29,5 +29,5 @@ Pass 1 fills `canonicalPlayerId` for every GUID (aliases and canonicals). Pass 2
 - `gender` and `membership` are null unless `config.exposePersonalFields` is set; see [Personal data](/features/personal-data.md).
 - Failure handling follows [Degrade and flag](/conventions/degrade-and-flag.md).
 
-## Gap
-Ranking and rating entries keep the upstream `id` as `playerId` without going through `canonicalPlayerId` (`src/domain/index-builder.ts:140,165`), so an aliased id there is not merged.
+## Rankings and ratings
+Upstream ranks a player under whichever GUID they were entered with. `buildPointsSeries` maps every ranking and rating entry's `id` through `canonicalPlayerId`, so profiles find standings recorded under an alias. A series that lists one person under two alias ids keeps both entries and emits a warning.

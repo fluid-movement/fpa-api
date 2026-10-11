@@ -1,0 +1,5 @@
+- [x] Ranking and rating entries carry the canonical player id when upstream lists an alias GUID
+- [x] A player's profile shows rankings and ratings recorded under any of their aliases
+- [x] Historical snapshots (GET /snapshots/{key}) are canonicalized the same way
+- [x] A series listing the same canonical player twice is flagged with a warning
+- [x] Tests cover alias canonicalization in rankings and ratings

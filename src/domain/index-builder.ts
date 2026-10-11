@@ -114,7 +114,8 @@ function buildSnapshots(manifest: RawManifestResponse): SnapshotRef[] {
  */
 export function buildPointsSeries(
 	points: RawPointsResponse,
-	results: Map<string, DivisionResult>
+	results: Map<string, DivisionResult>,
+	canonicalPlayerId: Map<string, string>
 ): {
 	rankings: Map<string, RankingSeries>;
 	ratings: Map<string, RatingSeries>;
@@ -123,6 +124,10 @@ export function buildPointsSeries(
 	const rankings = new Map<string, RankingSeries>();
 	const ratings = new Map<string, RatingSeries>();
 	const warnings: string[] = [];
+
+	// Upstream ranks a player under whichever GUID they were entered with, which
+	// may be an alias. Resolve to the canonical id so profiles find the entry.
+	const canonical = (id: string): string => canonicalPlayerId.get(id) ?? id;
 
 	for (const [seriesKey, rawEntries] of Object.entries(points.data ?? {})) {
 		if (!Array.isArray(rawEntries)) continue;
@@ -137,7 +142,7 @@ export function buildPointsSeries(
 				.map((entry, position) => ({
 					// Ratings carry no explicit rank; it is positional.
 					rank: position + 1,
-					playerId: entry.id!,
+					playerId: canonical(entry.id!),
 					fullName: entry.fullName?.trim() || 'Unknown Player',
 					rating: entry.rating!,
 					matchCount: entry.matchCount ?? 0,
@@ -153,6 +158,7 @@ export function buildPointsSeries(
 				);
 			}
 
+			warnDuplicatePlayers(seriesKey, entries, warnings);
 			ratings.set(seriesKey, { series: seriesKey, type: 'rating', division, entries });
 			continue;
 		}
@@ -162,7 +168,7 @@ export function buildPointsSeries(
 			.filter((entry) => entry.id)
 			.map((entry) => ({
 				rank: entry.rank ?? 0,
-				playerId: entry.id!,
+				playerId: canonical(entry.id!),
 				fullName: entry.fullName?.trim() || 'Unknown Player',
 				points: entry.points ?? 0,
 				resultsCount: entry.resultsCount ?? 0,
@@ -184,10 +190,34 @@ export function buildPointsSeries(
 			}))
 			.sort((a, b) => a.rank - b.rank);
 
+		warnDuplicatePlayers(seriesKey, entries, warnings);
 		rankings.set(seriesKey, { series: seriesKey, type: 'ranking', division, entries });
 	}
 
 	return { rankings, ratings, warnings };
+}
+
+/**
+ * Two upstream entries in one series can resolve to the same canonical player
+ * when both a duplicate and its canonical record were ranked. Both are kept;
+ * the duplicate is flagged so it shows up on /health.
+ */
+function warnDuplicatePlayers(
+	seriesKey: string,
+	entries: { playerId: string }[],
+	warnings: string[]
+): void {
+	const seen = new Set<string>();
+	const duplicates = new Set<string>();
+	for (const { playerId } of entries) {
+		if (seen.has(playerId)) duplicates.add(playerId);
+		seen.add(playerId);
+	}
+	for (const playerId of duplicates) {
+		warnings.push(
+			`Series "${seriesKey}" lists player ${playerId} more than once under different alias ids`
+		);
+	}
 }
 
 /** Flatten results into a per-player placement list for profiles and dashboards. */
@@ -394,7 +424,7 @@ export function buildIndex(corpus: Corpus): Index {
 
 	const liveEntry = corpus.directory?.eventDirectory?.[0];
 
-	const pointsSeries = buildPointsSeries(corpus.points, results);
+	const pointsSeries = buildPointsSeries(corpus.points, results, canonicalPlayerId);
 	warnings.push(...pointsSeries.warnings);
 
 	return {

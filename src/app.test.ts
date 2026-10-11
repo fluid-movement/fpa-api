@@ -12,7 +12,7 @@ vi.mock('./upstream/sources.js', () => ({
 				: {
 						data: [
 							{
-								id: 'p1',
+								id: 'dupe',
 								fullName: 'Ryan Young',
 								rank: 1,
 								points: 100,
@@ -75,8 +75,10 @@ const fixture: Corpus = {
 	},
 	points: {
 		data: {
+			// Upstream ranks players under whichever GUID they were entered with,
+			// which can be an alias. 'dupe' resolves to p1.
 			'ranking-open': [
-				{ id: 'p1', fullName: 'Ryan Young', rank: 1, points: 100, resultsCount: 1, pointsList: [{ resultsId: 'r1', points: 100 }] }
+				{ id: 'dupe', fullName: 'Ryan Young', rank: 1, points: 100, resultsCount: 1, pointsList: [{ resultsId: 'r1', points: 100 }] }
 			],
 			'rating-open': [
 				{ id: 'p2', fullName: 'James Wiseman', rating: 1500, matchCount: 200 },
@@ -189,6 +191,7 @@ describe('GET /rankings', () => {
 		const { status, body } = await get('/rankings');
 		expect(status).toBe(200);
 		expect(body.series).toBe('ranking-open');
+		expect(body.items[0].playerId).toBe('p1');
 		expect(body.items[0].breakdown[0]).toMatchObject({
 			eventId: 'e1',
 			eventName: 'Anzio Spring Jam 2026',
@@ -250,6 +253,7 @@ describe('GET /snapshots', () => {
 		const { status, body } = await get('/snapshots/ranking-open_2026-1-15');
 		expect(status).toBe(200);
 		expect(body.rankings[0].series).toBe('ranking-open');
+		expect(body.rankings[0].entries[0].playerId).toBe('p1');
 		expect(body.rankings[0].entries[0].breakdown[0]).toMatchObject({
 			eventId: 'e1',
 			eventName: 'Anzio Spring Jam 2026'

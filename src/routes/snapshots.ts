@@ -93,7 +93,8 @@ snapshots.openapi(detailRoute, async (c) => {
 	// different shape from the live feed, hence snapshotToPoints.
 	const { rankings, ratings } = buildPointsSeries(
 		snapshotToPoints(key, payload),
-		index.results
+		index.results,
+		index.canonicalPlayerId
 	);
 
 	return c.json(
