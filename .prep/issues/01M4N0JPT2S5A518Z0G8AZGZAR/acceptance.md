@@ -1,0 +1,3 @@
+- [x] Each entry the area names exists as a draft with the scope the map gives
+- [x] Every entry is linked from /overview.md
+- [x] Every entry is confirmed against its scoped code

@@ -13,3 +13,15 @@ fpa-api is a read-only REST API (TypeScript, Hono with `@hono/zod-openapi`, Node
 The code is layered. `src/upstream/` fetches raw payloads without interpreting them; `src/domain/` turns them into the `Index` with pure, synchronous functions; `src/store/` holds the current Index, swaps it atomically, runs tiered refreshes and persists the last good raw corpus to disk; `src/routes/` are thin `createRoute()` handlers whose Zod schemas in `src/schemas/` double as the OpenAPI spec committed in `openapi.json`.
 
 `pnpm dev` runs the server on port 3000 (reference at `/docs`), `pnpm test` runs the vitest suite against fixtures with no network, `pnpm check` typechecks, `pnpm spec` regenerates `openapi.json`. Production is a Docker image on Coolify. The human-facing documentation lives in `docs/` (ARCHITECTURE, UPSTREAM, OPERATIONS, INTEGRATION) and the README.
+
+## Map
+
+**Upstream and its data:** [Upstream fetch layer](/components/upstream.md) · [Degrade and flag, never drop](/conventions/degrade-and-flag.md) · [Team points and round numbering](/pitfalls/points-and-rounds.md) · [Withholding in-progress events](/features/in-progress-event-gating.md)
+
+**Domain normalization and the Index:** [Index builder](/components/index-builder.md) · [Player alias resolution](/features/player-identity.md) · [Division normalization](/features/division-normalization.md) · [Results parsing](/components/results-parsing.md) · [Rankings, ratings and snapshots](/features/rankings-and-ratings.md)
+
+**Store, refresh and persistence:** [Store](/components/store.md) · [Tiered refresh](/features/refresh-tiers.md) · [Snapshot persistence](/components/snapshot-persistence.md) · [In-memory read model, no database, no writes](/decisions/in-memory-read-model.md)
+
+**HTTP API:** [HTTP app](/components/http-app.md) · [Defining routes and schemas](/conventions/routes-and-schemas.md) · [Candidate matching](/features/candidate-matching.md) · [Personal data withholding](/features/personal-data.md)
+
+**Conventions, configuration and operations:** [Layering rules](/conventions/layering.md) · [Testing](/conventions/testing.md) · [Configuration](/components/configuration.md) · [Build and deployment](/components/deployment.md) · [fpa-events integration](/features/fpa-events-integration.md)
