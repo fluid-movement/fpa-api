@@ -1,0 +1,1 @@
+- [x] Profiles are edited in fpa-profiles, seeded from the legacy site, and served on GET /players/{id}
