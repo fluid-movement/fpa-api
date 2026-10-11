@@ -8,14 +8,15 @@ generated:
   at: 2026-10-11T08:18:47Z
 scope:
   - src/store/snapshot.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+  - src/store/snapshot.test.ts
+confirmed_commit: 86c6bb1d3353297fd914a3d582fb301a7c48e4b2
 ---
 
 `src/store/snapshot.ts` persists the last good raw `Corpus` so a restart during an upstream outage still serves data. Overview of the rationale: `docs/ARCHITECTURE.md`, section "Surviving restarts".
 
 ## Behaviour
 - `saveSnapshot(corpus)` writes `{ version: 1, corpus }` as JSON to `config.snapshotPath` (env `SNAPSHOT_PATH`, default `./data/snapshot.json`; the Dockerfile sets `/app/data/snapshot.json`). It creates the directory, writes `<path>.tmp`, then `rename`s over the target, so a crash mid-write cannot leave a truncated file.
-- `loadSnapshot()` returns the corpus, or `null` for any problem: missing file, unparseable JSON, or `version !== SNAPSHOT_VERSION`. There is no logging and no schema validation of the parsed corpus. Bumping `SNAPSHOT_VERSION` is the way to discard incompatible snapshots after a `Corpus` shape change.
+- `loadSnapshot()` returns the corpus, or `null` when it cannot be used. A missing file (ENOENT, the first-boot state) is silent; an unreadable file, invalid JSON, `version !== SNAPSHOT_VERSION`, or a corpus missing one of the object-valued sources `buildIndex` reads (`players`, `events`, `results`, `manifest`, `points`) logs a `[snapshot]` warning. Deeper shape is not validated. Bumping `SNAPSHOT_VERSION` is the way to discard incompatible snapshots after a `Corpus` shape change.
 
 ## When it is used
 - `Store.initialize()` loads the snapshot, builds the index from it and sets `origin = 'snapshot'`, then immediately starts a network refresh. The service therefore answers requests before the first upstream call completes.

@@ -1,0 +1,4 @@
+- [x] A missing snapshot returns null without logging
+- [x] An unreadable, unparsable, wrong-version or malformed snapshot returns null and logs a warning naming the cause
+- [x] A valid snapshot still loads
+- [x] Tests cover each case

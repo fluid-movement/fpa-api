@@ -34,13 +34,47 @@ export async function saveSnapshot(corpus: Corpus): Promise<void> {
 }
 
 export async function loadSnapshot(): Promise<Corpus | null> {
+	let raw: string;
 	try {
-		const raw = await readFile(config.snapshotPath, 'utf8');
-		const parsed = JSON.parse(raw) as SnapshotFile;
-		if (parsed.version !== SNAPSHOT_VERSION) return null;
-		return parsed.corpus;
-	} catch {
-		// Missing or unreadable snapshot is an expected first-boot state.
+		raw = await readFile(config.snapshotPath, 'utf8');
+	} catch (error) {
+		// A missing snapshot is the expected first-boot state. Anything else
+		// (permissions, a directory in the way) means the volume is misconfigured.
+		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+			warnUnusable(`could not be read: ${(error as Error).message}`);
+		}
 		return null;
 	}
+
+	let parsed: Partial<SnapshotFile>;
+	try {
+		parsed = JSON.parse(raw) as Partial<SnapshotFile>;
+	} catch (error) {
+		warnUnusable(`is not valid JSON: ${(error as Error).message}`);
+		return null;
+	}
+
+	if (parsed?.version !== SNAPSHOT_VERSION) {
+		warnUnusable(`has version ${String(parsed?.version)}, expected ${SNAPSHOT_VERSION}`);
+		return null;
+	}
+
+	const missing = CORPUS_SOURCES.filter((source) => !isObject(parsed.corpus?.[source]));
+	if (missing.length > 0) {
+		warnUnusable(`is missing corpus source(s): ${missing.join(', ')}`);
+		return null;
+	}
+
+	return parsed.corpus!;
+}
+
+/** The sources buildIndex reads unconditionally; the rest are optional. */
+const CORPUS_SOURCES = ['players', 'events', 'results', 'manifest', 'points'] as const;
+
+function isObject(value: unknown): boolean {
+	return typeof value === 'object' && value !== null;
+}
+
+function warnUnusable(reason: string): void {
+	console.warn(`[snapshot] ${config.snapshotPath} ${reason}; ignoring it and refreshing from upstream`);
 }
