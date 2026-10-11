@@ -1,0 +1,1 @@
+Add `.github/workflows/ci.yml`, triggered on pull requests and pushes to main: install with the pinned pnpm 11 and Node 22 (see [Build and deployment](/components/deployment.md)), `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm test`, then `pnpm spec` and `git diff --exit-code openapi.json` ([Defining routes and schemas](/conventions/routes-and-schemas.md)).

@@ -1,0 +1,3 @@
+- [x] A workflow runs pnpm check, pnpm test and the openapi.json drift check on pull requests and pushes to main
+- [x] The workflow uses the pnpm version pinned in package.json and Node 22
+- [x] The steps pass locally against the current tree

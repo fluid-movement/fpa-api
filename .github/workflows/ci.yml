@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Reads the pinned version from package.json's packageManager field, the
+      # same one the Dockerfile gets through corepack.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+
+      # openapi.json is committed as a reviewable diff of the API surface, so it
+      # must match what the route definitions generate.
+      - name: Check openapi.json is up to date
+        run: |
+          pnpm spec
+          git diff --exit-code openapi.json || {
+            echo "::error::openapi.json is stale. Run pnpm spec and commit the result."
+            exit 1
+          }

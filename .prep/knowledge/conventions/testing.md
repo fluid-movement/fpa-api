@@ -9,7 +9,8 @@ generated:
 scope:
   - src/**/*.test.ts
   - vitest.config.ts
-confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
+  - .github/workflows/**
+confirmed_commit: b62738e757d69710285a66d77a2b4f5d25704d7d
 ---
 
 `pnpm test` runs `vitest run` (config in `vitest.config.ts`: node environment, `src/**/*.test.ts`). Tests are colocated with the code they cover and never touch the network.
@@ -32,3 +33,6 @@ confirmed_commit: a59faeb505252c7b1587a39ad9bf09b060c70a34
 - `config` is a module-level constant read at import, so config-driven behaviour (personal fields, in-progress events) needs that in mind when testing both modes.
 
 Related: [Degrade and flag](/conventions/degrade-and-flag.md) (tests assert flagged-not-dropped); `docs/ARCHITECTURE.md`, section "Testing". `pnpm check` (`tsc --noEmit`) is the separate typecheck.
+
+## CI
+`.github/workflows/ci.yml` runs on pull requests and pushes to main: `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm test`, then `pnpm spec` and fails if `openapi.json` changed. Commit the regenerated spec with any route or schema change ([Defining routes and schemas](/conventions/routes-and-schemas.md)).
