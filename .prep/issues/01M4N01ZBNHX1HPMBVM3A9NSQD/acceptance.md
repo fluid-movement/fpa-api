@@ -1,0 +1,3 @@
+- [x] dist/ is no longer tracked
+- [x] dist/ is listed in .gitignore
+- [x] pnpm build still writes dist/ locally

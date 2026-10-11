@@ -1,0 +1,1 @@
+Run `git rm -r --cached dist` and add `dist/` to `.gitignore`. Nothing reads the committed copy: the Dockerfile builds `dist/` in its builder stage and `.dockerignore` excludes the host copy ([Build and deployment](/components/deployment.md)).
