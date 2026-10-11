@@ -1,0 +1,10 @@
+Follow these steps; each prep command validates before writing.
+
+1. Read the existing documentation and configuration first (README, docs/, ADRs, design documents, build files, CI), then the code's top-level structure. Note what is already explained well and where it lives. In a large project, give each area to a subagent that returns a short summary, rather than reading it all yourself.
+2. Write the map as findings: prep findings 01M4MZW6TZPRHHGR1Z3A48PD3D --body-file -. Start with two or three paragraphs on what the project is, how it is organized and how it is built and tested. Then list the proposed entries as a table: type (overview, feature, component, decision, convention, pitfall), path such as /components/export.md, title, one-line description, and scope (paths or globs the entry describes). Group them into areas of three to eight entries.
+3. Ask the user to review the map and adjust it until they agree. This is the important review; entries are cheap to write once the map is right.
+4. Write the overview: prep knowledge new /overview.md --type overview --title "<project>" --description "<one line>" --status draft --body-file -. It describes the project in a few paragraphs; links to entries are added as the entries are written. Writing it marks the knowledge base bootstrapped.
+5. Create one issue per area under the bootstrap parent: prep new --parent 01M4MZW5VQQ1BGDWED81XYDYCK --kind code --tag bootstrap --title "Document <area>" --body-file -, naming the entries from the map. Each writes its entries with prep knowledge new --status draft --scope ..., links them from the overview with prep knowledge update, confirms them with prep knowledge confirm, and completes with the commit that added them.
+6. Complete this issue: prep complete 01M4MZW6TZPRHHGR1Z3A48PD3D --docs /overview.md.
+
+Conventions for entries: one concept per entry, current state only, bundle-relative links such as /components/export.md, and descriptions that let an agent decide whether to open the entry.

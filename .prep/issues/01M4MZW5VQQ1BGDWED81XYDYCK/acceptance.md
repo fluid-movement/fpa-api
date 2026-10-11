@@ -1,0 +1,2 @@
+- [ ] Every area of the map is written as entries
+- [ ] The user reviewed the drafts and the reviewed entries are stable

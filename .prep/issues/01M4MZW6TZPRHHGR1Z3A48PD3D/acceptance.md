@@ -1,0 +1,3 @@
+- [x] The map is written as findings and the user reviewed it
+- [x] /overview.md exists as a draft
+- [x] Each area of the map has a child issue under the bootstrap parent
