@@ -1,3 +1,11 @@
+---
+type: finding
+title: "Findings: Analyse the legacy WordPress dump for player profile data"
+description: "Findings: Analyse the legacy WordPress dump for player profile data"
+date: "2026-10-11"
+issue: 01M4N2FFB70GV9SE7V23AVT651
+---
+
 The dump (`u399401230_8oFzc.sql`, 52 MB, MariaDB 11.8, utf8mb4) is the whole WordPress site, including users, password hashes, forum, form entries and PayPal data. It is ignored by git (`*.sql`) and must never be committed or published.
 
 ## Where the profile data lives

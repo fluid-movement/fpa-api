@@ -12,6 +12,7 @@ okf_version: "0.2"
 
 * [components](/components/index.md) - 8 entries
 * [conventions](/conventions/index.md) - 4 entries
-* [decisions](/decisions/index.md) - 1 entry
+* [decisions](/decisions/index.md) - 9 entries
 * [features](/features/index.md) - 9 entries
+* [findings](/findings/index.md) - 2 entries
 * [pitfalls](/pitfalls/index.md) - 1 entry

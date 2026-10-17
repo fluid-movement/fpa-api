@@ -1,3 +1,11 @@
+---
+type: finding
+title: "Findings: Survey the project into a knowledge map"
+description: "Findings: Survey the project into a knowledge map"
+date: "2026-10-11"
+issue: 01M4MZW6TZPRHHGR1Z3A48PD3D
+---
+
 ## The project
 
 fpa-api is a read-only REST API (TypeScript, Hono + `@hono/zod-openapi`, Node ≥ 22.12, pnpm 11) over the freestyle frisbee community's competitive data. Upstream is five independent AWS microservices (players, events, results, points, judging) with no shared query layer, no referential integrity and no cache headers. Because the whole corpus is only about 5 MB, the service fetches everything, builds an immutable in-memory `Index` (alias-resolved players, canonical divisions, ranking points joined back to events) and serves every request from RAM. No request ever triggers an upstream call except `GET /snapshots/{key}`.
