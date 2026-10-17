@@ -6,6 +6,4 @@ documentation:
   entries:
     - /features/in-progress-event-gating.md
     - /components/index-builder.md
-dod:
-  - prep check passes
 ---

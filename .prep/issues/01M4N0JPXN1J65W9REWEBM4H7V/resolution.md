@@ -9,6 +9,4 @@ documentation:
     - /features/candidate-matching.md
     - /features/personal-data.md
     - /overview.md
-dod:
-  - prep check passes
 ---

@@ -10,6 +10,4 @@ documentation:
     - /components/results-parsing.md
     - /features/rankings-and-ratings.md
     - /overview.md
-dod:
-  - prep check passes
 ---

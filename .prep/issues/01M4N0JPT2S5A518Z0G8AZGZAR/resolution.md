@@ -9,6 +9,4 @@ documentation:
     - /components/snapshot-persistence.md
     - /decisions/in-memory-read-model.md
     - /overview.md
-dod:
-  - prep check passes
 ---

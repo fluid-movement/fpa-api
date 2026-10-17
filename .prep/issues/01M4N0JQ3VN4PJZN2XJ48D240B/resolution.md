@@ -10,6 +10,4 @@ documentation:
     - /components/deployment.md
     - /features/fpa-events-integration.md
     - /overview.md
-dod:
-  - prep check passes
 ---

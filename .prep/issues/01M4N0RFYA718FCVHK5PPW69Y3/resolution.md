@@ -8,6 +8,4 @@ documentation:
     - /components/results-parsing.md
     - /conventions/degrade-and-flag.md
     - /features/rankings-and-ratings.md
-dod:
-  - prep check passes
 ---

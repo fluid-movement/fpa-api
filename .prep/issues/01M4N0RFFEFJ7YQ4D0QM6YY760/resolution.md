@@ -6,6 +6,4 @@ documentation:
   entries:
     - /features/player-identity.md
     - /features/rankings-and-ratings.md
-dod:
-  - prep check passes
 ---

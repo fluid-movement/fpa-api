@@ -10,6 +10,4 @@ documentation:
     - /features/fpa-events-integration.md
     - /decisions/in-memory-read-model.md
     - /overview.md
-dod:
-  - prep check passes
 ---

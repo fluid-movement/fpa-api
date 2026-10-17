@@ -9,6 +9,4 @@ documentation:
     - /pitfalls/points-and-rounds.md
     - /features/in-progress-event-gating.md
     - /overview.md
-dod:
-  - prep check passes
 ---
