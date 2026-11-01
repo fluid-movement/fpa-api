@@ -1,1 +1,1 @@
-- [ ] Tests and typecheck pass
+- [x] Tests and typecheck pass
