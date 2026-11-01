@@ -553,10 +553,11 @@
           },
           "wins": {
             "type": "number",
-            "description": "First places across all rounds and pools"
+            "description": "First places in a final (round 1), once per event and division"
           },
           "podiums": {
-            "type": "number"
+            "type": "number",
+            "description": "Top-three finishes in a final (round 1), once per event and division"
           },
           "firstEventDate": {
             "type": [

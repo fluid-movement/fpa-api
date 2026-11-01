@@ -1,0 +1,27 @@
+---
+title: Player stats count wins and podiums for every round, not just the final
+kind: code
+tags:
+  - bug
+priority: high
+---
+
+## Requirement
+
+Found 2026-11-01 by the owner on the events app player page (https://events.freestyledisc.org/players/49cfbce0-5d53-4d09-a53f-a720f980a4fd). The events app shows `stats.wins` and `stats.podiums` straight from `GET /players/{id}`, and the numbers are too high.
+
+`computeStats` in src/routes/players.ts (about lines 68-73) loops over every placement row and adds a win for each `place === 1` and a podium for each `place <= 3`. A player has one placement row per round they took part in (Quarterfinals, Semifinals, Finals), and `place` in an earlier round is the placing within that round's pool, not a result. So a first place in a semifinal pool counts as a win, and one division at one event can count several times.
+
+Evidence for Anka Radwanska (49cfbce0-5d53-4d09-a53f-a720f980a4fd): the API returns 38 wins and 83 podiums over 114 placement rows. Counting only the final (`round === 1`, `roundName` "Finals") gives 22 wins and 43 podiums. Examples: Anzio jam 13, Open Pairs: Finals place 1 and Semifinals pool B place 1, so one win is counted twice. FPAW 2026, Mixed Pairs: Quarterfinals place 1, Semifinals place 2, Finals place 4, so the API counts one win and two podiums for a fourth place finish.
+
+Expected behaviour: wins and podiums count a finish in the final round only (`round === 1`), once per event and division. Divisions with no final row in the data (older events, e.g. the 2019 Frisbeer Cup with only a Semifinals row) count nothing, because a pool placement is not a final result. Confirm that choice with the owner before relying on it. `eventCount` and `placementCount` are unaffected.
+
+Also update the descriptions of `wins` and `podiums` in openapi.json, src/schemas/domain.ts and docs/INTEGRATION.md, and check other consumers of these fields. The events app (fpa-events) only reads them.
+
+## Acceptance
+
+1. [ ] wins and podiums count only final-round (`round === 1`) finishes, once per event and division
+2. [ ] A test covers a player with a first place in an earlier round, a final that is not a podium, and an event with no final row
+3. [ ] The API docs and OpenAPI descriptions state the new definition
+
+## Open questions

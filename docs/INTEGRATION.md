@@ -90,7 +90,7 @@ Add `fpaPlayerKey` to the `user` table, linked via `GET /match/players?name=…`
 
 Then `GET /players/{fpaPlayerKey}` gives everything the dashboard needs in one call: current rank
 and points, Elo rating with its `matchCount`, career `stats` (events, wins, podiums, first/last
-event date), and a full `placements` timeline.
+event date; wins and podiums count final-round finishes only, once per event and division), and a full `placements` timeline.
 
 ---
 

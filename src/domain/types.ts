@@ -157,7 +157,7 @@ export interface PlayerPlacement {
 export interface PlayerStats {
 	eventCount: number;
 	placementCount: number;
-	/** First places, counted across all rounds and pools. */
+	/** First places in a final (round 1), once per event and division. */
 	wins: number;
 	podiums: number;
 	firstEventDate: string | null;

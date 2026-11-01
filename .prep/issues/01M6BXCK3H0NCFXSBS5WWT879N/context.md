@@ -1,0 +1,1 @@
+Change `computeStats` in `src/routes/players.ts`: count wins/podiums only for placements with `round === 1`, deduplicated per `eventId`+`division`. Update descriptions in `src/domain/types.ts`, `src/schemas/domain.ts`, `openapi.json`, `docs/INTEGRATION.md`. Tests in `src/app.test.ts` or `src/domain/players.test.ts`.

@@ -3,6 +3,7 @@ import type { Index, PlayerRanking, PlayerRating, PlayerStats } from '../domain/
 import { commonErrors, notFound, notFoundResponse, paginate } from '../lib/http.js';
 import { paginated, PlayerProfileSchema, PlayerSchema } from '../schemas/domain.js';
 import { PlayerIdParam, PlayerListQuery } from '../schemas/params.js';
+import { countFinalResults } from '../domain/stats.js';
 import { store } from '../store/store.js';
 
 export const players = new OpenAPIHono();
@@ -62,14 +63,10 @@ function computeStats(index: Index, playerId: string): PlayerStats {
 	const eventIds = new Set<string>();
 	const divisions = new Set<string>();
 	const dates: string[] = [];
-	let wins = 0;
-	let podiums = 0;
 
 	for (const placement of placements) {
 		eventIds.add(placement.eventId);
 		divisions.add(placement.division);
-		if (placement.place === 1) wins++;
-		if (placement.place !== null && placement.place <= 3) podiums++;
 		if (placement.eventDate) dates.push(placement.eventDate);
 	}
 
@@ -78,8 +75,7 @@ function computeStats(index: Index, playerId: string): PlayerStats {
 	return {
 		eventCount: eventIds.size,
 		placementCount: placements.length,
-		wins,
-		podiums,
+		...countFinalResults(placements),
 		firstEventDate: dates[0] ?? null,
 		lastEventDate: dates[dates.length - 1] ?? null,
 		divisions: [...divisions].sort()

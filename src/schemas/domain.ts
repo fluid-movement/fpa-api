@@ -188,8 +188,10 @@ export const PlayerStatsSchema = z
 	.object({
 		eventCount: z.number(),
 		placementCount: z.number(),
-		wins: z.number().describe('First places across all rounds and pools'),
-		podiums: z.number(),
+		wins: z.number().describe('First places in a final (round 1), once per event and division'),
+		podiums: z
+			.number()
+			.describe('Top-three finishes in a final (round 1), once per event and division'),
 		firstEventDate: z.string().nullable(),
 		lastEventDate: z.string().nullable(),
 		divisions: z.array(z.string())
