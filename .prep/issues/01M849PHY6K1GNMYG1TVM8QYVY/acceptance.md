@@ -1,0 +1,8 @@
+- [ ] UPSTREAM_BASE_URL (default https://freestylejudge.com) replaces the five UPSTREAM_* URLs; SYNC_INTERVAL_MS (default 1 hour) replaces the tiered probe intervals
+- [ ] A pure, unit-tested adapter converts sync players, events and divisions and the latest points snapshot per series into the existing Raw* types; domain normalizer tests are unchanged
+- [ ] Refresh fetches both manifests, fetches only new or changed events in batches of at most 50, drops events that left the manifest or were not returned, refetches players only when players.hash changed, and fetches a series' latest snapshot only when its key changed; the diff is unit-tested
+- [ ] A failed refresh keeps serving the previous state and never swaps in a partially fetched one; raw sync state is persisted in the snapshot (version bumped, old snapshots ignored with a warning)
+- [ ] live, the judging probes, in-progress withholding and CONSUME_IN_PROGRESS_EVENTS are gone; /health reports per-source freshness and counts for the new sources
+- [ ] Hidden players are left out of /players, /players?q and /match/players and kept by name in placements and results, with tests
+- [ ] Docs (UPSTREAM, ARCHITECTURE, OPERATIONS, README, .env.example) and openapi.json describe the new upstream; pnpm check and pnpm test pass
+- [ ] End-to-end sync against the real FullstackFreestyleTools sync API succeeds (later, once the server side exists)

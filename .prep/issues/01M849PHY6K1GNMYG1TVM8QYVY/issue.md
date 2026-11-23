@@ -32,11 +32,18 @@ Public, read-only, through the app's existing `publicGet` helper (CORS, rate lim
 
 fpa-api's loop: poll `sync/manifest` and `points/getManifest` (hourly, plus `POST /refresh`); fetch only events whose hash changed or that are new, in batches of 50; drop events that left the manifest; refetch players when their hash changed; fetch a ranking snapshot when a new key appears. First start: about 20 calls.
 
-## Open questions
+The contract for the sync API is docs/SYNC_API.md.
 
-- **Which events count as finished?** No column says so. Proposed: not a test event, not `is_playing`, `end_date` before today, and every team in rounds 1+ of its visible divisions has a place. A pool lock is not usable: a missing `pools` row reads as unlocked, and the imported events have none.
-- **Events hidden from the Rankings Generator** (`events.is_hidden`): include or leave out? The Points API includes them.
-- **Hidden players**: leave them out of `sync/players`, or include them with a `hidden` flag so fpa-api decides? Teams can reference them.
-- **fpa-api's `live` field and `CONSUME_IN_PROGRESS_EVENTS`**: remove, or keep `live` as an always-null field for compatibility with consumers?
-- **Mapping in fpa-api**: map the sync payloads into the existing `Raw*` types (domain layer and its tests untouched), or change the normalizers to read the new types directly?
-- **Ranking history**: comes with Ryan's historic data migration; confirm that it lands in `points_snapshots` so `downloadPointsData` serves it.
+## Resolved questions
+
+- Which events count as finished: see decision "Finished event: past, not playing, not a test, fully placed".
+- Events hidden from the Rankings Generator are included (same decision).
+- Hidden players: sent flagged; fpa-api leaves them out of lists, search and matching, keeps them by name in placements (decision "Sync API sends hidden players flagged; fpa-api applies the policy").
+- `live` and `CONSUME_IN_PROGRESS_EVENTS`: removed, no compatibility period (decision "Remove live and CONSUME_IN_PROGRESS_EVENTS from fpa-api").
+- Mapping: adapt sync payloads into the existing Raw* types first (decision "Adapt sync payloads into the existing Raw* types first").
+
+## Pending outside this issue
+
+- Ranking history arrives with Ryan's historic data migration; whether it lands in `points_snapshots` (so `downloadPointsData` serves it) is to be confirmed with him. It does not change fpa-api's code: fpa-api reads whatever the points manifest lists.
+
+## Open questions
