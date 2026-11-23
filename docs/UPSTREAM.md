@@ -2,121 +2,95 @@
 
 Where the data comes from, how it is shaped, and what is wrong with it.
 
-This document is the reference for anyone touching the normalization layer. Every quirk listed
-here was observed in production data, not inferred from documentation — upstream publishes no
-schema and offers no contract.
+This document is the reference for anyone touching the upstream or normalization layer. The
+endpoint contract itself is [SYNC_API.md](SYNC_API.md); this page is about how fpa-api uses it and
+which quirks of the data survive it.
 
 ---
 
-## The five services
+## FullstackFreestyleTools
 
-All are serverless (API Gateway + Lambda + DynamoDB + an S3 cache) in `us-west-2`, maintained by
-Ryan Young (GitHub: [SmilesAir](https://github.com/SmilesAir)).
+All data comes from [FullstackFreestyleTools](https://github.com/SmilesAir/FullstackFreestyleTools)
+(freestylejudge.com), maintained by Ryan Young (GitHub: [SmilesAir](https://github.com/SmilesAir)).
+It replaces the five AWS microservices (players, event summaries, results, points, live judging)
+this service used to read; those are being retired.
 
-| Service | Repo | Holds |
+We read two of its APIs, both from one base URL (`UPSTREAM_BASE_URL`):
+
+| API | Added by | Holds |
 | --- | --- | --- |
-| Player names | [`PlayerNameService`](https://github.com/SmilesAir/PlayerNameService) | ~3100 players: name, country, gender, membership, alias links |
-| Event summaries | [`EventSummaryService`](https://github.com/SmilesAir/EventSummaryService) | ~910 events: name, start/end date, legacy FPA website id |
-| Event results | [`EventResultsService`](https://github.com/SmilesAir/EventResultsService) | ~1490 division results: pools, placements, points |
-| Points/rankings | [`PointsService`](https://github.com/SmilesAir/PointsService) | Current standings + ~100 dated snapshots |
-| Live judging | [`FreestyleJudge`](https://github.com/SmilesAir/FreestyleJudge) | **Only the one currently-running event** |
+| Sync API, `/api/v1/sync/*` | Us, as a PR on our fork `fluid-movement/FullstackFreestyleTools` | Finished events with full placements, every player |
+| Points API, `/api/v1/points/*` | Upstream, for ResultsRender | Ranking and rating snapshots |
 
-They share **one GUID namespace**. A player or event key is the same value in every service, which
-is the only reason cross-service joining is possible at all.
+The sync API is shaped for keeping a mirror up to date — a manifest of hashes, batched full events,
+the player list — not for page views. The decisions behind it are in prep, issue
+`01M849PHY6K1GNMYG1TVM8QYVY`.
 
 ## Endpoints consumed
 
-All are public, unauthenticated `GET`s with `CORS: *`.
+All are public, unauthenticated `GET`s served through upstream's `publicGet` helper: CORS, rate
+limits, `Cache-Control: public, max-age=60, s-maxage=600`. Errors are `{ "error": string }`.
 
-| Endpoint | Size | Used for |
+| Endpoint | When | Used for |
 | --- | --- | --- |
-| `{players}/getAllPlayers` | 759 KB | Player directory |
-| `{events}/getAllEvents` | 228 KB | Event summaries |
-| `{results}/getAllResults` | **3.8 MB** | All results. The expensive one. |
-| `{points}/getManifest` | 16 KB | Snapshot index — also a freshness probe |
-| `{points}/downloadLatestPointsData` | 682 KB | Current rankings and ratings |
-| `{points}/downloadPointsData/{key}` | ~96 KB | One historical snapshot, on demand |
-| `{judging}/getEventDirectory` | **135 B** | Live event — the cheap freshness probe |
-| `{judging}/getEventDataVersion/{key}` | **42 B** | Live event version probe |
-| `{judging}/getEventData/{key}` | ~247 KB | Pool lock state. Only for directoried events, only when the version moved. |
+| `sync/manifest` | Every sync | One hash per finished event, one hash for the player list |
+| `sync/events?ids=…` | Events new or changed since the last sync, ≤ 50 ids per call | Events, divisions, rounds, pools, placements |
+| `sync/players` | When the players hash changed | Player directory, alias links, hidden flag |
+| `points/getManifest` | Every sync | Snapshot index; picks each series' latest key |
+| `points/downloadPointsData/{key}` | When a series' latest key changed; on demand for `GET /snapshots/{key}` | One ranking or rating snapshot |
 
-### Caching characteristics
-
-- **No `ETag`, no `Last-Modified`, no `Cache-Control`.** Conditional requests are impossible.
-- **No gzip.** `Accept-Encoding: gzip` is ignored; 3.8 MB is 3.8 MB on the wire.
-- Upstream Lambdas serve from their own S3 cache, invalidated via a dirty-flag in an `infoTable`.
-  That flag is not exposed, which is why we poll.
-
-This is the constraint that shapes the whole refresh strategy — see [ARCHITECTURE.md](ARCHITECTURE.md).
+A first sync costs about 20 calls; a quiet hour costs 2. Hashes are opaque: we only compare them for
+equality with what we stored. See [ARCHITECTURE.md](ARCHITECTURE.md) for the sync loop.
 
 ---
 
-## Data shapes
+## Finished events only
 
-### Player
+The sync API only ever contains **finished** events: not a test event, not `is_playing`,
+`end_date` before today, at least one visible division with teams in round 1 or later, and every
+such team placed. Events hidden from the Rankings Generator are included, as in the Points API.
+fpa-api therefore never serves an event while it is being judged and has no notion of "live".
 
-```jsonc
-{
-  "key": "22a14ecd-…",
-  "firstName": "Jean-Marie",
-  "lastName": "Abel",
-  "country": "",            // often empty
-  "gender": "M",            // 'M' | 'F' | 'X', not enforced
-  "membership": 0,          // 0 means "none", not "member #0"
-  "fpaWebsiteId": "2422",   // id on the legacy FPA WordPress site
-  "aliasKey": "4eebb67b-…", // present on ~508 of ~3138 records
-  "createdAt": 1759844088562,
-  "lastActive": 1759844088562
-}
+This replaces the old judging-service probes and pool-lock withholding. Pool locks are not used
+upstream either: a missing `pools` row reads as unlocked, and imported events have none.
+
+An event can leave the finished set again (an admin reopens it). It then disappears from the
+manifest and fpa-api drops it; if it disappears between the manifest and the events call, the
+events call leaves it out and fpa-api drops it too.
+
+## How payloads become the corpus
+
+`src/upstream/adapter.ts` converts the sync payloads into the `Raw*` shapes the domain normalizers
+were written for (the old services' wire shapes), so the normalizers and their tests did not change.
+
+| Sync payload | Becomes |
+| --- | --- |
+| `players[]` | `RawPlayersResponse.players` keyed by `id`; `aliasId` → `aliasKey`; `hidden` carried |
+| `events[]` | `RawEvent` keyed by `id`; `fpaId`/`postName` → `additionalData` |
+| `events[].divisions[]` | One `RawResult` per division, keyed by the division `id` (what rankings cite as `resultsId`) |
+| `rounds[].pools[].teams[]` | `resultsData.round<N>.pool<X> = { poolId: X, teamData: [{ players, place, points }] }` |
+| Latest snapshot per series | `RawPointsResponse.data[series]` |
+| `points/getManifest` | `RawManifestResponse`, `createdAt` normalized to epoch ms |
+
+Fields the new upstream does not have are simply absent: player `createdAt`/`lastActive`, event and
+result `createdAt` are always `null` in the API now. Gender and membership are not sent at all.
+
+### The join that matters
+
+```
+player.id ──┬─< events[].divisions[].rounds[].pools[].teams[].playerIds[]
+            └─< ranking rows[].pointsList[] (via row .id)
+
+division.id ═══ ranking rows[].pointsList[].resultsId
 ```
 
-### Event
-
-```jsonc
-{
-  "key": "b5e6e8f3-…",
-  "eventName": "1995 New England Championships",
-  "startDate": "1995-09-29",   // YYYY-MM-DD
-  "endDate": "1995-09-30",
-  "createdAt": 1760681626734,
-  "additionalData": { "fpaId": "1159", "postName": "1995-new-england-championships" }
-}
-```
-
-### Result
-
-One record is **one division at one event**.
-
-```jsonc
-{
-  "key": "27aa579e-…",
-  "eventId": "75cc5a34-…",       // joins to Event.key
-  "eventName": "AIFDA Japan Beach Disc Fiesta (October 2022)",
-  "divisionName": "Open Pairs",
-  "createdAt": 1672339324077,
-  "rawText": "start pools …",    // the original text entry, kept as an audit trail
-  "resultsData": {
-    "divisionName": "Open Pairs",
-    "eventId": "75cc5a34-…",
-    "isHidden": false,           // present on 2 records
-    "round1": {
-      "id": 1,
-      "poolA": {
-        "poolId": "A",
-        "teamData": [
-          { "players": ["guid", "guid"], "place": 1, "points": 0 }
-        ]
-      }
-    }
-  }
-}
-```
+That last edge is the valuable one: it turns "1632 points" into a named list of events.
 
 ### Rankings vs ratings
 
-Both arrive from `downloadLatestPointsData` under `data`, keyed by series name. **They are not the
-same shape and not the same measurement.** Merging them is the single easiest way to ship a bug
-here — it silently produces rank 0 / points 0 for every rated player.
+Each snapshot holds one series. **Rankings and ratings are not the same shape and not the same
+measurement.** Merging them is the single easiest way to ship a bug here — it silently produces
+rank 0 / points 0 for every rated player.
 
 ```jsonc
 // ranking-open, ranking-women — cumulative tournament points
@@ -129,100 +103,59 @@ here — it silently produces rank 0 / points 0 for every rated player.
   "highestRank": 1, "highestRankDate": "2018-2-17" }
 ```
 
-Ratings carry **no** `rank` field — rank is positional. They also cover far more people (2265 vs
-341), most with a `matchCount` too low to be meaningful.
+Ratings carry **no** `rank` field — rank is positional. They also cover far more people, most with
+a `matchCount` too low to be meaningful.
 
-### The join that matters
-
-```
-player.key ──┬─< results[].resultsData.round{N}.pool{X}.teamData[].players[]
-             └─< rankings[].pointsList[] (via entry .id)
-
-event.key ═══ results[].eventId ═══ judging eventKey
-
-results.key ═══ rankings[].pointsList[].resultsId
-```
-
-That last edge is the valuable one: it turns "1632 points" into a named list of events.
+There is no "latest points" endpoint. A series' current standings are its manifest entry with the
+newest `createdAt` that is not hidden; the series is the key's prefix (`ranking-open_2026-11-5` →
+`ranking-open`).
 
 ---
 
 ## Known data problems
 
-Every item here is handled explicitly in the normalizer and covered by a test.
+The historic data was migrated from the old services and keeps their quirks. Every item here is
+handled explicitly in the normalizer and covered by a test.
 
-| Problem | Scale | How we handle it |
+| Problem | Scale (old services) | How we handle it |
 | --- | --- | --- |
-| Duplicate players linked by `aliasKey` | 508 records, chains up to 3 deep | Resolved to a canonical player; alias GUIDs still accepted on lookup |
+| Duplicate players linked by `aliasId` | ~508 records, chains up to 3 deep | Resolved to a canonical player; alias GUIDs still accepted on lookup |
 | **Alias loops** (A→B→A) | 0 today, but recurring | Iterative walk with a visited set; the cycle's lexicographically smallest id becomes canonical |
-| `aliasKey` pointing at a non-existent player | 1 | Chain stops at the last real player; warning emitted |
-| Player GUID in results but not in the directory | 1 | Kept, flagged `unknown: true`. Never dropped. |
-| `eventId` in results with no matching event | 2 (both test data) | A stub event is synthesized so the results survive |
+| `aliasId` pointing at a non-existent player | 1 | Chain stops at the last real player; warning emitted |
+| Player id in a team but not in the player list | 1 | Kept, flagged `unknown: true`. Never dropped. |
 | Inconsistent division names | `Open Coop`, `open pairs`, `Open pairs`, `undefined`, `Results`, `Open Test` | Normalized for grouping; `divisionRaw` preserved |
-| Lowercase pool keys (`poola`) | 4 | Matched case-insensitively |
 | Non-contiguous round numbers | Common | Rounds are read by number, not assumed sequential |
-| `isHidden` results | 2 | Excluded from output |
-| Events still being judged | 0-1 at a time | Event and its partial results withheld until every pool is `isLocked` |
-| `showInDirectory` left true after an event ends | Routinely, for weeks | Never trusted alone; pool locks decide |
 | Manifest dates not zero-padded (`2025-7-3`) | All | Normalized to `YYYY-MM-DD` |
+| Hidden players | — | Left out of lists, search and matching; still named in results and placements |
+
+Handled upstream now, so no longer seen here: lowercase pool keys (`poola` arrives as `"A"`), hidden
+divisions and round 0 (never sent), results pointing at missing events (events carry their
+divisions).
+
+A hidden player is a property of the person: the canonical record's flag decides, and a hidden
+duplicate does not hide the player it resolves to.
 
 ### The `points` trap
 
-`teamData[].points` means different things depending on the ruleset the event was judged under:
+`teams[].points` means different things depending on the ruleset the event was judged under:
 
 - **FPA2020** — a score; higher is better.
 - **SimpleRanking** — a sum of judge ranks; **lower** is better.
 
-The `rulesId` lives in the judging system's event blob, which is discarded once an event ends, so
-**the results data does not tell you which ruleset produced it**. Points are therefore not
-comparable across events. Always sort and display by `place`.
-
-### Pool locks are the finished signal
-
-There is **no "is this running" flag on the event record.** `getAllEvents` returns whole DynamoDB
-items, and across all 912 events the complete key set is `key, eventName, startDate, endDate,
-createdAt, additionalData{fpaId, postName}`. `setEventSummary` writes exactly those five fields.
-
-The flag is `isLocked`, and it lives **per pool** in the judging service. A head judge locks a pool
-when its scoring is final (`POST /updatePoolLocked/{poolKey}/isLocked/{isLocked}`), and the flags
-are readable on `getEventData/{key}` under `eventData.eventData.poolMap` — note the doubled
-nesting. An event has finished when every pool is locked.
-
-**Presence in `getEventDirectory` does not mean "running".** `showInDirectory` is set when an event
-is imported and cleared only by a manual admin call (`removeEventFromDirectory`). In production the
-directory listed FPAW 2026 — which ended 2026-08-02 and had four complete division results — until
-well into September. Filtering on directory presence alone would have withheld a finished event
-indefinitely; the pool locks are what disambiguate it.
-
-Two further consequences:
-
-- Locking a pool bumps the event's `minorVersion` but leaves the `getEventDirectory` payload
-  byte-identical, so the 60 s directory probe has to fold the per-event version probes into its
-  signature or it will not notice an event finishing.
-- Upstream's own ranking `points` and `rank` totals still include a running event. We can decline
-  to attribute points to a withheld event, but we cannot recompute the totals.
-
-Handled in `findInProgress` (`src/domain/index-builder.ts`); override with
-`CONSUME_IN_PROGRESS_EVENTS=true`.
-
-### Live judging data is ephemeral
-
-`getEventDirectory` returns only the event currently being judged. Per-judge score breakdowns are
-not retained after an event finishes — the durable record is the aggregated `EventResultsService`
-entry. Anything richer than final placements has to be captured while the event is running.
+The ruleset is not part of the payload, so points are not comparable across events. Always sort and
+display by `place`.
 
 ---
 
 ## Working with the upstream maintainer
 
-We have no contract and no credentials. Consuming these endpoints depends on goodwill, so:
+The sync API is our PR to Ryan's app; the Points API is his.
 
-1. **Confirm consumption is welcome** and agree a rough request budget. Our steady state is
-   ~1.5 KB/minute of probes plus one ~5 MB fetch per hour, independent of our traffic.
-2. **Ask for warning before redeploys or auth changes.** The API Gateway IDs are hardcoded in his
-   clients; a redeploy under new IDs breaks us until the env vars are repointed.
-3. **Two small asks with high payoff:** exposing the existing `infoTable` dirty-flag as a version
-   endpoint (or an `ETag`) would let us drop polling entirely, and enabling gzip would cut the
-   3.8 MB results payload by roughly 10x.
-4. **Division normalization** — offer to own the mapping rather than framing it as a data-quality
-   complaint. Same for alias loops, which his own README documents as a known issue.
+1. **The contract is [SYNC_API.md](SYNC_API.md).** `formatVersion` changes only on a breaking change;
+   fpa-api refuses a manifest with a version it does not know and keeps serving the last good data.
+2. **Request budget:** two small calls an hour when nothing changed, counted under the `sync` rate
+   limit. Use `POST /refresh` for immediacy rather than a tighter interval.
+3. **Production switches** only once the PR is merged and the historic data (including ranking
+   history in `points_snapshots`) is migrated. Until then production reads the old services.
+4. **Division normalization and alias loops** — offer to own the mapping rather than framing it as a
+   data-quality complaint.

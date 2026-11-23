@@ -39,9 +39,10 @@ In Coolify: **Configuration → General → Build Pack → `Dockerfile`.**
 
 - **A volume at `/app/data`.** The image defaults `SNAPSHOT_PATH` to `/app/data/snapshot.json`.
   Without persistence the service still runs, but every restart begins with an empty index and a
-  ~4 second cold fetch — and a restart during an upstream outage serves 503s until upstream
-  recovers. With the volume, a cold start during a total outage still serves the full dataset.
-- **Outbound HTTPS to `*.execute-api.us-west-2.amazonaws.com`.**
+  full sync (~20 upstream calls) — and a restart during an upstream outage serves 503s until
+  upstream recovers. With the volume, a restart serves at once and syncs only what changed, and a
+  cold start during a total outage still serves the full dataset.
+- **Outbound HTTPS to `UPSTREAM_BASE_URL`** (`freestylejudge.com` by default).
 
 ### Health checks
 
@@ -61,7 +62,7 @@ disabled) and `CORS_ORIGINS` if browsers will call this directly. `PORT` and `SN
 already set correctly by the image.
 
 To serve player profiles, set `PROFILES_URL` to fpa-profiles' base URL (its `/export` is pulled with
-every full refresh), and give fpa-profiles this service's `REFRESH_TOKEN` as its
+every sync), and give fpa-profiles this service's `REFRESH_TOKEN` as its
 `FPA_API_REFRESH_TOKEN` so a saved profile is public immediately. Unset, profiles are disabled.
 
 ### Running it anywhere else
@@ -81,27 +82,44 @@ docker run -p 3000:3000 -v fpa-api-data:/app/data -e REFRESH_TOKEN=… fpa-api
 {
   "ready": true,
   "builtAt": 1784986071820,
-  "lastFullRefreshAt": 1784986071820,
-  "lastRefreshDurationMs": 3980,
+  "lastFullRefreshAt": 1784986071820,   // last successful read of the sync API
+  "lastRefreshDurationMs": 420,
   "refreshing": false,
-  "origin": "network",              // or "snapshot" — see below
+  "origin": "network",                  // or "snapshot" — see below
   "sources": {
-    "players":  { "lastSuccessAt": 1784986071820, "lastErrorAt": null, "lastError": null },
-    "results":  { … }
+    "syncManifest":   { "lastSuccessAt": 1784986071820, "lastErrorAt": null, "lastError": null },
+    "events":         { … },            // only called when something changed
+    "players":        { … },            // only called when the players hash changed
+    "pointsManifest": { … },
+    "points":         { … },            // only called when a series' latest key changed
+    "profiles":       { … }
   },
-  "counts": { "players": 2631, "events": 912, "results": 1484, "rankingSeries": 2, "snapshots": 85 },
+  "sync": {
+    "formatVersion": 1,
+    "generatedAt": "2026-11-23T10:00:00.000Z",
+    "events": 912,
+    "playersHash": "9e107d9d372bb6826bd81d3542a419d6",
+    "pointsKeys": { "ranking-open": "ranking-open_2026-11-5", "rating-open": "rating-open_2026-11-5" },
+    "lastChanges": { "at": 1784986071820, "requests": 2, "eventsFetched": 0, "eventsRemoved": 0,
+                     "eventsMissing": 0, "playersFetched": false, "pointsFetched": [], "pointsRemoved": [] }
+  },
+  "counts": { "players": 2631, "hiddenPlayers": 4, "events": 912, "results": 1484, "rankingSeries": 2, "snapshots": 85 },
   "warnings": [ "…" ]
 }
 ```
+
+Because `events`, `players` and `points` are only called when the manifests say something changed,
+an old `lastSuccessAt` on them is normal. Freshness is `lastFullRefreshAt` and `syncManifest`.
 
 Worth alerting on:
 
 | Signal | Meaning |
 | --- | --- |
 | `ready: false` for more than a minute | No data at all — upstream down and no snapshot |
-| `origin: "snapshot"` persisting | Serving carried-over data; every network refresh has failed |
+| `origin: "snapshot"` persisting | Serving carried-over data; every sync has failed |
 | `lastFullRefreshAt` older than ~2 hours, or `null` while `ready` | The scheduler is stuck or upstream is failing |
-| A source with a recent `lastErrorAt` | That specific upstream service is unhealthy |
+| A source with a recent `lastErrorAt` | That upstream endpoint is unhealthy (`lastError` carries upstream's `error` text) |
+| `syncManifest.lastError` mentions `formatVersion` | Upstream made a breaking change to the sync API; fpa-api needs an update |
 | `counts.results` dropping sharply | Upstream data loss, or a normalization regression |
 
 `warnings` grows as upstream data quality drifts. It is informational, not an error condition — but
@@ -113,7 +131,9 @@ a sudden jump usually means something changed upstream and is worth reading.
 
 ### Results were just entered upstream and are not showing
 
-Expected: the full refresh runs hourly. To pull immediately:
+Expected: the sync runs hourly, and the sync API only lists an event once it has finished — ended
+before today, not playing, every team placed (see [UPSTREAM.md](UPSTREAM.md)). An event appears the
+day after it ends at the earliest. To sync immediately:
 
 ```bash
 curl -X POST https://your-host/refresh -H "Authorization: Bearer $REFRESH_TOKEN"
@@ -124,25 +144,24 @@ open.
 
 ### Everything returns 503
 
-Check `GET /health`. If `ready` is false, either this is a cold start (wait ~5 s) or upstream is
-unreachable and there is no snapshot. Check `sources` for which service is failing, then confirm
-directly:
+Check `GET /health`. If `ready` is false, either this is a cold start (wait for the first sync) or
+upstream is unreachable and there is no snapshot. Check `sources` for which endpoint is failing,
+then confirm directly:
 
 ```bash
-curl -sI https://v869a98rf9.execute-api.us-west-2.amazonaws.com/production/getAllResults
+curl -s https://freestylejudge.com/api/v1/sync/manifest | head -c 300
 ```
 
-### Upstream returned 403/404 on endpoints that used to work
+### Upstream returned 404 or 429
 
-Most likely the upstream services were redeployed under new API Gateway IDs. This is the known
-fragility called out in [UPSTREAM.md](UPSTREAM.md) — the base URLs are env vars precisely so this is
-a config change, not a code change. Get the new IDs from the maintainer and update
-`UPSTREAM_PLAYERS`, `UPSTREAM_EVENTS`, `UPSTREAM_RESULTS`, `UPSTREAM_POINTS`, `UPSTREAM_JUDGING`.
+`404` on `/api/v1/sync/*` means the sync API is not deployed at `UPSTREAM_BASE_URL` (wrong base URL,
+or a FullstackFreestyleTools deploy without our PR). `429` means we hit its `sync` rate limit:
+something is calling `POST /refresh` in a loop, or `SYNC_INTERVAL_MS` was set far too low.
 
 ### A player's results look incomplete
 
 Almost always an unresolved duplicate upstream: the same person exists under two GUIDs with no
-`aliasKey` linking them. We can only merge what upstream links. Confirm with:
+`aliasId` linking them. We can only merge what upstream links. Confirm with:
 
 ```bash
 curl 'https://your-host/match/players?name=Their%20Name'
@@ -151,17 +170,23 @@ curl 'https://your-host/match/players?name=Their%20Name'
 Two separate canonical entries for one person is the signature. The fix is upstream, via the
 maintainer's player-merge tool.
 
+### A player is missing from `/players` or `/match/players`
+
+They may be hidden upstream. Hidden players are left out of lists, search and matching on purpose,
+but are still named in results and placements, and `GET /players/{id}` still answers.
+`counts.hiddenPlayers` on `/health` shows how many there are.
+
 ### Memory keeps growing
 
 The index is roughly 30-60 MB resident. If it grows unboundedly, suspect the snapshot file rather
 than the index — check that `SNAPSHOT_PATH` is being overwritten, not appended to (it is written
 via write-then-rename, so a growing `.tmp` file means failed renames).
 
-### Refresh takes much longer than ~4 seconds
+### A sync takes much longer than usual
 
-The 3.8 MB results payload is uncompressed and its download dominates the refresh. A slow refresh
-is almost always upstream Lambda cold-start latency. Persistent slowness is worth raising with the
-maintainer — enabling gzip on their side would cut it by roughly 10x.
+A quiet sync is two small requests. A slow one is usually a first start (~20 requests, events in
+batches of 50 one at a time) or a slow upstream; `sync.lastChanges.requests` on `/health` says how
+much work the last sync did.
 
 ---
 
@@ -177,7 +202,7 @@ Breaking changes to response shapes need coordinating with fpa-events; see
 
 ## Cost and etiquette
 
-We are a guest on someone else's infrastructure. Before shortening any interval in
-`config.refresh`, consider that the full refresh transfers 5 MB uncompressed from a third party's
-AWS account. Hourly is ~120 MB/day; at 5-minute intervals it would be ~1.4 GB/day for data that
-changes a few times a month. Use `POST /refresh` for immediacy instead of a tighter poll.
+We are a guest on someone else's infrastructure. A quiet sync is cheap — two small, CDN-cached
+manifest calls — but it is still counted under upstream's `sync` rate limit, and the data changes a
+few times a month. Keep `SYNC_INTERVAL_MS` at an hour and use `POST /refresh` for immediacy instead
+of a tighter poll.

@@ -2,14 +2,12 @@
 
 A read-only REST API over the freestyle frisbee judging, results and rankings data.
 
-The community's competitive data lives in five independent AWS microservices, each with its own
-DynamoDB table and no shared query layer. That makes simple questions expensive: "show me this
-player's competitive history" currently means downloading roughly 5 MB across three services and
-joining them by hand in the browser.
-
-This service does that work once. It fetches everything, resolves duplicate player identities,
-normalizes inconsistent division names, joins ranking points back to the events that produced them,
-and serves the result from an in-memory index in microseconds.
+The community's competitive data lives in [FullstackFreestyleTools](https://github.com/SmilesAir/FullstackFreestyleTools)
+(freestylejudge.com). This service keeps a mirror of its finished events, players and rankings —
+synced incrementally by content hash through a sync API ([`docs/SYNC_API.md`](docs/SYNC_API.md)) —
+resolves duplicate player identities, normalizes inconsistent division names, joins ranking points
+back to the events that produced them, and serves the result from an in-memory index in
+microseconds.
 
 Built with [Hono](https://hono.dev) and [`@hono/zod-openapi`](https://github.com/honojs/middleware/tree/main/packages/zod-openapi).
 
@@ -24,8 +22,10 @@ pnpm dev
 
 Then open **http://localhost:3000/docs** for the interactive API reference.
 
-The service fetches ~5 MB from upstream on boot (about 4 seconds) and is ready immediately after.
-Requests arriving before then get `503` with a `Retry-After` header.
+On first boot the service runs a full sync from upstream (about 20 requests) and is ready
+immediately after; later boots serve the saved snapshot at once and sync only what changed.
+Requests arriving before the first data get `503` with a `Retry-After` header. Point
+`UPSTREAM_BASE_URL` at a local FullstackFreestyleTools to develop against it.
 
 ```bash
 curl localhost:3000/health                        # freshness + data quality
@@ -71,8 +71,8 @@ details in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 references with point values. This service resolves them, so `"Francesco Santolin — 1632 points"`
 becomes a breakdown naming FPAW2024, Copa Città di Milano and the rest.
 
-**Merges duplicate players.** 508 of 3138 upstream player records are duplicates linked by an
-`aliasKey` chain. Requesting any alias GUID here returns the canonical player, with all their
+**Merges duplicate players.** About 500 of 3100 upstream player records are duplicates linked by an
+`aliasId` chain. Requesting any alias GUID here returns the canonical player, with all their
 results merged.
 
 **Normalizes divisions.** Production contains `Open Pairs` alongside `Open Coop`, `open pairs`,
@@ -93,7 +93,7 @@ rather than dropped. `GET /health` lists every data-quality problem found in the
 | `GET /events` | Event list, with name/date/division filters |
 | `GET /events/{id}` | One event plus all its results |
 | `GET /events/{id}/results` | Just the results |
-| `GET /players` | Canonical player directory |
+| `GET /players` | Canonical player directory (players hidden upstream are left out) |
 | `GET /players/{id}` | Profile (bio, nickname, links… from fpa-profiles), career stats, standings, every placement |
 | `GET /rankings` | Season standings by tournament points |
 | `GET /rankings/series` | Available ranking series |
@@ -104,7 +104,7 @@ rather than dropped. `GET /health` lists every data-quality problem found in the
 | `GET /match/events` | Rank upstream events against one of ours, for linking |
 | `GET /match/players` | Same, for players |
 | `GET /health` | Freshness, per-source status, data-quality warnings |
-| `POST /refresh` | Force an immediate refresh (token-protected) |
+| `POST /refresh` | Force an immediate sync (token-protected) |
 
 ## Two traps worth knowing before you build a UI
 
@@ -127,18 +127,14 @@ that matter:
 | `PORT` | `3000` | HTTP port |
 | `REFRESH_TOKEN` | *(unset)* | Bearer token for `POST /refresh`. **Unset disables the route.** |
 | `CORS_ORIGINS` | *(unset)* | Comma-separated allowlist. Unset means server-to-server only. |
-| `EXPOSE_PERSONAL_FIELDS` | `false` | Include player gender and FPA membership number |
-| `FULL_REFRESH_INTERVAL_MS` | `3600000` | Full corpus refresh floor |
-| `SNAPSHOT_PATH` | `./data/snapshot.json` | Last-good corpus, for surviving restarts |
+| `UPSTREAM_BASE_URL` | `https://freestylejudge.com` | FullstackFreestyleTools: the sync API and the Points API |
+| `SYNC_INTERVAL_MS` | `3600000` | How often to sync. A quiet sync is two small requests. |
+| `REQUEST_TIMEOUT_MS` | `30000` | Per-request upstream timeout |
+| `SNAPSHOT_PATH` | `./data/snapshot.json` | Last-good sync state, for surviving restarts and syncing incrementally after one |
 | `PROFILES_URL` | *(unset)* | Base URL of [fpa-profiles](https://github.com/fluid-movement/fpa-profiles), whose `/export` supplies player profiles. Unset disables profiles. |
-
-The five upstream base URLs are also env vars (`UPSTREAM_PLAYERS`, `UPSTREAM_EVENTS`,
-`UPSTREAM_RESULTS`, `UPSTREAM_POINTS`, `UPSTREAM_JUDGING`). They are third-party AWS API Gateway
-IDs — if those services are redeployed the IDs change, and being able to repoint without a code
-change is the difference between a config edit and an outage.
 
 ## Data protection
 
-Player names, countries, genders and FPA membership numbers are personal data. Gender and
-membership number are **withheld by default** and only included when `EXPOSE_PERSONAL_FIELDS=true`.
-Confirm with the upstream maintainer what is intended to be public before enabling it.
+Player names and countries are personal data. The upstream sends no gender, membership number or
+other personal fields, and this API serves none. Players hidden upstream are left out of the player
+list, search and matching; results still name them, so line-ups stay whole.

@@ -86,7 +86,8 @@ when unlinked; never show an empty results table.
 ### 3. Dashboard metrics
 
 Add `fpaPlayerKey` to the `user` table, linked via `GET /match/players?name=…` in account settings —
-**user-confirmed**, since names in the directory are not unique.
+**user-confirmed**, since names in the directory are not unique. Players hidden upstream are never
+offered as candidates and are left out of `GET /players`, but results and placements still name them.
 
 Then `GET /players/{fpaPlayerKey}` gives everything the dashboard needs in one call: current rank
 and points, Elo rating with its `matchCount`, career `stats` (events, wins, podiums, first/last
