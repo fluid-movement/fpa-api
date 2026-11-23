@@ -15,18 +15,52 @@ const SourceStatusSchema = z
 	})
 	.openapi('SourceStatus');
 
+const SyncChangesSchema = z
+	.object({
+		at: z.number(),
+		requests: z.number().describe('Upstream requests the sync made, manifests included'),
+		eventsFetched: z.number(),
+		eventsRemoved: z.number().describe('Stored events that left the sync manifest'),
+		eventsMissing: z
+			.number()
+			.describe('Events requested but not returned: they stopped being finished mid-sync, and were dropped'),
+		playersFetched: z.boolean(),
+		pointsFetched: z.array(z.string()).describe('Series whose latest snapshot was downloaded'),
+		pointsRemoved: z.array(z.string())
+	})
+	.openapi('SyncChanges');
+
 const StatusSchema = z
 	.object({
 		ready: z.boolean().describe('False until the first successful load'),
 		builtAt: z.number().nullable().describe('When the in-memory index was built'),
-		lastFullRefreshAt: z.number().nullable(),
+		lastFullRefreshAt: z.number().nullable().describe('When the sync API was last read successfully'),
 		lastRefreshDurationMs: z.number().nullable(),
 		refreshing: z.boolean(),
 		origin: z.enum(['network', 'snapshot']).nullable().describe('Where the current data came from'),
-		sources: z.record(z.string(), SourceStatusSchema).describe('Per-upstream-service health'),
+		sources: z
+			.record(z.string(), SourceStatusSchema)
+			.describe(
+				'Per-upstream-endpoint health: syncManifest, events, players, pointsManifest, points, profiles. ' +
+					'events, players and points are only called when the manifests say something changed.'
+			),
+		sync: z
+			.object({
+				formatVersion: z.number(),
+				generatedAt: z.string().nullable().describe("The sync manifest's generatedAt for the data served"),
+				events: z.number().describe('Finished events held'),
+				playersHash: z.string(),
+				pointsKeys: z
+					.record(z.string(), z.string())
+					.describe('Latest snapshot key per series behind the current standings'),
+				lastChanges: SyncChangesSchema.nullable().describe('What the last successful sync changed')
+			})
+			.nullable()
+			.describe('Mirror state; null until a sync has succeeded or a snapshot was restored'),
 		counts: z
 			.object({
-				players: z.number(),
+				players: z.number().describe('Listed players (canonical, not hidden)'),
+				hiddenPlayers: z.number(),
 				events: z.number(),
 				results: z.number(),
 				rankingSeries: z.number(),
@@ -64,15 +98,16 @@ const refreshRoute = createRoute({
 	method: 'post',
 	path: '/refresh',
 	tags: ['Operations'],
-	summary: 'Force an immediate full refresh',
+	summary: 'Force an immediate sync',
 	description:
-		'Pulls the full corpus now instead of waiting for the scheduled refresh. Intended to be ' +
-		'called right after results are entered upstream. Requires a bearer token matching ' +
+		'Syncs from upstream now instead of waiting for the scheduled sync: reads both manifests and ' +
+		'fetches whatever changed. Intended to be called right after results are entered upstream ' +
+		'or a profile is saved. Requires a bearer token matching ' +
 		'REFRESH_TOKEN; when that variable is unset the route is disabled rather than left open.',
 	security: [{ bearerAuth: [] }],
 	responses: {
 		200: {
-			description: 'Refresh completed',
+			description: 'Sync completed',
 			content: {
 				'application/json': {
 					schema: z.object({ refreshed: z.boolean(), status: StatusSchema }).openapi('RefreshResult')
@@ -81,7 +116,7 @@ const refreshRoute = createRoute({
 		},
 		401: { description: 'Invalid or missing token', content: { 'application/json': { schema: ErrorSchema } } },
 		503: {
-			description: 'Refresh failed, or the endpoint is disabled',
+			description: 'Sync failed (the previous data is still served), or the endpoint is disabled',
 			content: { 'application/json': { schema: ErrorSchema } }
 		}
 	}

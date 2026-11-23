@@ -88,7 +88,6 @@ const fixture: Corpus = {
 			]
 		}
 	},
-	directory: null,
 	// fpa-profiles' export, stored under an id that is now an alias of p1.
 	profiles: {
 		version: 1,
@@ -310,7 +309,7 @@ describe('operations', () => {
 		const { status, body } = await get('/health');
 		expect(status).toBe(200);
 		expect(body.ready).toBe(true);
-		expect(body.counts).toMatchObject({ players: 2, events: 2, results: 1 });
+		expect(body.counts).toMatchObject({ players: 2, hiddenPlayers: 0, events: 2, results: 1 });
 	});
 
 	it('serves a valid OpenAPI document covering every route', async () => {
@@ -345,18 +344,17 @@ describe('operations', () => {
 	});
 });
 
-describe('an event that is still being judged', () => {
-	// e1 is in the judging directory with an unlocked pool, so it and its
-	// results must not be served at all — partial placements would otherwise
-	// churn under consumers until the head judge locks the last pool.
+describe('a hidden player', () => {
+	// Upstream sends hidden players flagged, because teams reference them. They
+	// are left out of lists, search and matching, but results keep naming them.
 	beforeAll(() => {
 		store.hydrate({
 			...fixture,
-			directory: {
-				eventDirectory: [{ eventKey: 'e1', eventName: 'Anzio Spring Jam 2026', modifiedAt: 1 }]
-			},
-			liveLocks: {
-				e1: { allPoolsLocked: false, poolCount: 3, unlockedCount: 1, observedAt: 0 }
+			players: {
+				players: {
+					...fixture.players.players,
+					p2: { ...fixture.players.players!.p2!, hidden: true }
+				}
 			}
 		});
 	});
@@ -365,38 +363,35 @@ describe('an event that is still being judged', () => {
 		store.hydrate(fixture);
 	});
 
-	it('is absent from the event list', async () => {
-		const { body } = await get('/events');
-		expect(body.total).toBe(1);
-		expect(body.items.map((e: { id: string }) => e.id)).toEqual(['e2']);
+	it('is left out of the player list and search', async () => {
+		const list = await get('/players');
+		expect(list.body.total).toBe(1);
+		expect(list.body.items.map((p: { id: string }) => p.id)).toEqual(['p1']);
+		expect((await get('/players?q=wiseman')).body.total).toBe(0);
+		expect((await get('/players?country=USA')).body.total).toBe(1);
 	});
 
-	it('404s on direct lookup', async () => {
-		expect((await get('/events/e1')).status).toBe(404);
+	it('is not offered as a match candidate', async () => {
+		const { body } = await get('/match/players?name=James%20Wiseman');
+		expect(body.candidates.map((c: { player: { id: string } }) => c.player.id)).not.toContain('p2');
+		expect((await get('/match/players?name=Ryan%20Young')).body.candidates[0].player.id).toBe('p1');
 	});
 
-	it('withholds its results from the player profile', async () => {
-		const { body } = await get('/players/p1');
-		expect(body.placements).toEqual([]);
-	});
+	it('is still named in results and placements', async () => {
+		const event = await get('/events/e1');
+		const team = event.body.results[0].rounds[0].pools[0].teams[0];
+		expect(team.players.map((m: { fullName: string }) => m.fullName)).toContain('James Wiseman');
 
-	it('explains itself in the health warnings', async () => {
-		const { body } = await get('/health');
-		expect(body.warnings).toContainEqual(expect.stringContaining('is being judged'));
-	});
-
-	it('serves it again once every pool is locked', async () => {
-		store.hydrate({
-			...fixture,
-			directory: {
-				eventDirectory: [{ eventKey: 'e1', eventName: 'Anzio Spring Jam 2026', modifiedAt: 1 }]
-			},
-			liveLocks: {
-				e1: { allPoolsLocked: true, poolCount: 3, unlockedCount: 0, observedAt: 0 }
-			}
+		const profile = await get('/players/p1');
+		expect(profile.body.placements[0].teammates[0]).toMatchObject({
+			id: 'p2',
+			fullName: 'James Wiseman',
+			unknown: false
 		});
+	});
 
-		expect((await get('/events')).body.total).toBe(2);
-		expect((await get('/events/e1')).status).toBe(200);
+	it('is counted separately on /health', async () => {
+		const { body } = await get('/health');
+		expect(body.counts).toMatchObject({ players: 1, hiddenPlayers: 1 });
 	});
 });

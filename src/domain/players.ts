@@ -1,4 +1,3 @@
-import { config } from '../config.js';
 import type { RawPlayer } from '../upstream/types.js';
 import type { Player } from './types.js';
 
@@ -110,8 +109,6 @@ export function buildPlayers(raw: Record<string, RawPlayer>): ResolvedPlayers {
 			lastName: entry.lastName?.trim() ?? '',
 			fullName: fullNameOf(entry),
 			country: entry.country?.trim() || null,
-			gender: config.exposePersonalFields ? (entry.gender ?? null) : null,
-			membership: config.exposePersonalFields ? (entry.membership ?? null) : null,
 			fpaWebsiteId: entry.fpaWebsiteId ?? null,
 			fpaWebsiteIds: legacyIds(id, aliasIds.get(id) ?? [], raw),
 			aliasIds: (aliasIds.get(id) ?? []).sort(),

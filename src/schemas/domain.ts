@@ -13,13 +13,11 @@ import { z } from '@hono/zod-openapi';
 
 export const PlayerSchema = z
 	.object({
-		id: z.string().describe('Canonical player GUID, shared across all upstream services'),
+		id: z.string().describe('Canonical player GUID, as used across upstream results and rankings'),
 		firstName: z.string(),
 		lastName: z.string(),
 		fullName: z.string(),
 		country: z.string().nullable().describe('3-letter country code'),
-		gender: z.string().nullable().describe('Withheld unless EXPOSE_PERSONAL_FIELDS is enabled'),
-		membership: z.number().nullable().describe('Withheld unless EXPOSE_PERSONAL_FIELDS is enabled'),
 		fpaWebsiteId: z.string().nullable().describe('Id of this player on the legacy FPA website'),
 		fpaWebsiteIds: z
 			.array(z.string())
@@ -27,8 +25,8 @@ export const PlayerSchema = z
 				'Every legacy FPA website id of this player, including those carried by duplicate records; its own first'
 			),
 		aliasIds: z.array(z.string()).describe('Duplicate GUIDs that resolve to this player'),
-		createdAt: z.number().nullable(),
-		lastActive: z.number().nullable()
+		createdAt: z.number().nullable().describe('Not provided by the current upstream; always null'),
+		lastActive: z.number().nullable().describe('Not provided by the current upstream; always null')
 	})
 	.openapi('Player');
 
@@ -38,7 +36,7 @@ export const EventSummarySchema = z
 		name: z.string(),
 		startDate: z.string().nullable().describe('YYYY-MM-DD'),
 		endDate: z.string().nullable().describe('YYYY-MM-DD'),
-		createdAt: z.number().nullable(),
+		createdAt: z.number().nullable().describe('Not provided by the current upstream; always null'),
 		fpaWebsiteId: z.string().nullable(),
 		fpaWebsiteSlug: z.string().nullable(),
 		divisions: z.array(z.string()).describe('Normalized divisions that have results'),
@@ -96,7 +94,7 @@ export const DivisionResultSchema = z
 		eventName: z.string(),
 		division: z.string().describe('Canonical division name'),
 		divisionRaw: z.string().describe('Exactly as stored upstream, before normalization'),
-		createdAt: z.number().nullable(),
+		createdAt: z.number().nullable().describe('Not provided by the current upstream; always null'),
 		rounds: z.array(RoundSchema)
 	})
 	.openapi('DivisionResult');

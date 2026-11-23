@@ -13,10 +13,6 @@ export interface Player {
 	lastName: string;
 	fullName: string;
 	country: string | null;
-	/** Withheld unless EXPOSE_PERSONAL_FIELDS is enabled. */
-	gender: string | null;
-	/** Withheld unless EXPOSE_PERSONAL_FIELDS is enabled. */
-	membership: number | null;
 	fpaWebsiteId: string | null;
 	/** Legacy website ids of this player and all its aliases, its own first. */
 	fpaWebsiteIds: string[];
@@ -207,12 +203,6 @@ export interface PlayerProfile {
 	placements: PlayerPlacement[];
 }
 
-export interface LiveEvent {
-	eventId: string;
-	eventName: string;
-	modifiedAt: number | null;
-}
-
 /**
  * The immutable, fully-derived read model. Built once per refresh and swapped
  * in atomically — no request ever observes a half-updated index.
@@ -222,6 +212,11 @@ export interface Index {
 	players: Map<string, Player>;
 	/** Every upstream player GUID (including aliases) -> canonical player id. */
 	canonicalPlayerId: Map<string, string>;
+	/**
+	 * Canonical ids of hidden players. They stay in `players` so results and
+	 * placements can name them, but lists, search and matching leave them out.
+	 */
+	hiddenPlayerIds: Set<string>;
 	events: Map<string, EventSummary>;
 	results: Map<string, DivisionResult>;
 	resultsByEvent: Map<string, DivisionResult[]>;
@@ -229,7 +224,6 @@ export interface Index {
 	rankings: Map<string, RankingSeries>;
 	ratings: Map<string, RatingSeries>;
 	snapshots: SnapshotRef[];
-	live: LiveEvent | null;
 	/** Profile enrichment by canonical player id. */
 	profiles: Map<string, PlayerEnrichment>;
 	/** Non-fatal problems found while normalizing. Surfaced on /health. */

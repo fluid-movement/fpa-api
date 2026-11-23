@@ -1,7 +1,4 @@
-import { config } from '../config.js';
 import type {
-	RawDirectoryResponse,
-	RawEventDataResponse,
 	RawEventsResponse,
 	RawManifestResponse,
 	RawPlayersResponse,
@@ -29,9 +26,8 @@ import type {
 } from './types.js';
 
 /**
- * The raw corpus, exactly as fetched. This is what gets persisted to disk —
- * storing raw rather than derived data means we can change normalization logic
- * without a stale snapshot baking in the old behaviour.
+ * The raw corpus in the shapes the normalizers read. The store derives it from the persisted
+ * sync state through `upstream/adapter.ts`; tests build it directly.
  */
 export interface Corpus {
 	fetchedAt: number;
@@ -40,24 +36,8 @@ export interface Corpus {
 	results: RawResultsResponse;
 	manifest: RawManifestResponse;
 	points: RawPointsResponse;
-	directory: RawDirectoryResponse | null;
-	/**
-	 * Per-event pool lock state, for the events the judging service is
-	 * currently showing. An absent entry means "never observed" — either we
-	 * have not fetched it yet or the judging service was unreachable — which is
-	 * treated differently from an observed unlocked pool. See `findInProgress`.
-	 */
-	liveLocks?: Record<string, EventLockState>;
 	/** fpa-profiles' export; absent when the profiles source is disabled or never fetched. */
 	profiles?: RawProfilesExport | null;
-}
-
-export interface EventLockState {
-	/** False while any pool is still unlocked, i.e. the event is being judged. */
-	allPoolsLocked: boolean;
-	poolCount: number;
-	unlockedCount: number;
-	observedAt: number;
 }
 
 /**
@@ -65,7 +45,7 @@ export interface EventLockState {
  * builder expects.
  *
  * `downloadPointsData/{key}` returns a bare array for the one series its key
- * names, whereas `downloadLatestPointsData` returns an object keyed by series.
+ * names, whereas the index reads points keyed by series.
  * The series is recovered from the snapshot key ('ranking-open_2026-6-8' ->
  * 'ranking-open'), which also determines whether these are rankings or ratings.
  * The object form is still accepted in case upstream ever unifies them.
@@ -273,78 +253,6 @@ function buildPlacements(
 }
 
 /**
- * Reduce a judging event's pool map to the one fact we care about: is every
- * pool locked? The head judge locks a pool when its scoring is final, so an
- * event with no unlocked pools left has finished.
- *
- * A pool map with no pools at all counts as unlocked. An event that has been
- * created in the judging app but has no pools yet has certainly not finished.
- */
-export function summarizePoolLocks(payload: RawEventDataResponse): EventLockState {
-	const pools = Object.values(payload.eventData?.eventData?.poolMap ?? {});
-	const unlockedCount = pools.filter((pool) => pool.isLocked !== true).length;
-	return {
-		allPoolsLocked: pools.length > 0 && unlockedCount === 0,
-		poolCount: pools.length,
-		unlockedCount,
-		observedAt: Date.now()
-	};
-}
-
-/**
- * Which events are still being judged. Unless `CONSUME_IN_PROGRESS_EVENTS` is
- * set, these are withheld from the index; either way they define `Index.live`.
- *
- * Only events the judging directory is showing are candidates — everything
- * else is history. For those, the per-pool `isLocked` flags decide. Directory
- * presence alone is not enough: upstream's `showInDirectory` is cleared by a
- * manual admin call and routinely stays true for weeks after an event ends.
- *
- * When lock state was never observed we fall back to the calendar, and only
- * withhold an event that could still plausibly be running. Withholding on
- * unknown state alone would mean a judging-service outage silently drops a
- * finished event's complete results.
- */
-function findInProgress(corpus: Corpus, warnings: string[]): Set<string> {
-	const inProgress = new Set<string>();
-	const withhold = !config.consumeInProgressEvents;
-	const today = new Date().toISOString().slice(0, 10);
-
-	for (const entry of corpus.directory?.eventDirectory ?? []) {
-		const eventId = entry.eventKey;
-		if (!eventId) continue;
-
-		const name = entry.eventName?.trim() || 'Unnamed Event';
-		const lock = corpus.liveLocks?.[eventId];
-
-		if (lock) {
-			if (lock.allPoolsLocked) continue;
-			inProgress.add(eventId);
-			if (withhold) {
-				warnings.push(
-					`Event ${eventId} ("${name}") is being judged — ` +
-						`${lock.unlockedCount} of ${lock.poolCount} pool(s) unlocked; withheld from the index`
-				);
-			}
-			continue;
-		}
-
-		const endDate = corpus.events.allEventSummaryData?.[eventId]?.endDate ?? null;
-		if (endDate !== null && endDate < today) continue;
-
-		inProgress.add(eventId);
-		if (withhold) {
-			warnings.push(
-				`Event ${eventId} ("${name}") is in the judging directory with no observed pool ` +
-					`lock state and has not ended (endDate ${endDate ?? 'unknown'}); withheld from the index`
-			);
-		}
-	}
-
-	return inProgress;
-}
-
-/**
  * Build the complete read model from a raw corpus.
  *
  * Pure and synchronous: no I/O, no clock beyond `builtAt`. That makes the whole
@@ -358,17 +266,18 @@ export function buildIndex(corpus: Corpus): Index {
 	);
 	warnings.push(...playerWarnings);
 
-	// Events still being judged are withheld whole — their results are partial
-	// and keep changing until the last pool is locked. Resolved before anything
-	// is normalized so the excluded ids can be filtered out at the source.
-	const inProgress = findInProgress(corpus, warnings);
-	const withheld = config.consumeInProgressEvents ? new Set<string>() : inProgress;
+	// Hidden is a property of the person, so the canonical record's flag decides.
+	// Hidden players stay in `players` so results and placements keep naming
+	// them; lists, search and matching leave them out.
+	const hiddenPlayerIds = new Set<string>();
+	for (const id of players.keys()) {
+		if (corpus.players.players?.[id]?.hidden === true) hiddenPlayerIds.add(id);
+	}
 
 	// Results first: events need result counts, rankings need result lookups.
 	const results = new Map<string, DivisionResult>();
 	const unusable: string[] = [];
 	for (const [id, raw] of Object.entries(corpus.results.results ?? {})) {
-		if (raw.eventId && withheld.has(raw.eventId)) continue;
 		const normalized = normalizeResult(id, raw, players, canonicalPlayerId);
 		if (normalized) results.set(id, normalized);
 		// Hidden results are unpublished on purpose; anything else is broken data.
@@ -389,7 +298,6 @@ export function buildIndex(corpus: Corpus): Index {
 
 	const events = new Map<string, EventSummary>();
 	for (const [id, raw] of Object.entries(corpus.events.allEventSummaryData ?? {})) {
-		if (withheld.has(id)) continue;
 		const eventResults = resultsByEvent.get(id) ?? [];
 		events.set(id, {
 			id,
@@ -442,12 +350,6 @@ export function buildIndex(corpus: Corpus): Index {
 		);
 	}
 
-	// Live is the event being judged right now — by the same pool-lock rule that
-	// withholds it, not by directory presence, which outlasts the event.
-	const liveEntry = corpus.directory?.eventDirectory?.find(
-		(entry) => entry.eventKey && inProgress.has(entry.eventKey)
-	);
-
 	const pointsSeries = buildPointsSeries(corpus.points, results, canonicalPlayerId);
 	warnings.push(...pointsSeries.warnings);
 
@@ -458,6 +360,7 @@ export function buildIndex(corpus: Corpus): Index {
 		builtAt: Date.now(),
 		players,
 		canonicalPlayerId,
+		hiddenPlayerIds,
 		events,
 		results,
 		resultsByEvent,
@@ -465,13 +368,6 @@ export function buildIndex(corpus: Corpus): Index {
 		rankings: pointsSeries.rankings,
 		ratings: pointsSeries.ratings,
 		snapshots: buildSnapshots(corpus.manifest),
-		live: liveEntry?.eventKey
-			? {
-					eventId: liveEntry.eventKey,
-					eventName: liveEntry.eventName?.trim() || 'Unnamed Event',
-					modifiedAt: liveEntry.modifiedAt ?? null
-				}
-			: null,
 		profiles: profiles.profiles,
 		warnings
 	};

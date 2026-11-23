@@ -1,78 +1,60 @@
 import { config } from '../config.js';
 import { fetchJson } from './client.js';
 import type {
-	RawDirectoryResponse,
-	RawEventDataResponse,
-	RawEventDataVersion,
-	RawEventsResponse,
-	RawManifestResponse,
-	RawPlayersResponse,
-	RawPointsResponse,
+	PointsManifestResponse,
 	RawPointsSnapshotResponse,
 	RawProfilesExport,
-	RawResultsResponse
+	SyncEventsResponse,
+	SyncManifest,
+	SyncPlayersResponse
 } from './types.js';
 
 /**
- * One function per upstream endpoint. Nothing here interprets the data — that
- * is the normalizer's job. Keeping fetching dumb means the transport layer can
- * be swapped (for a DynamoDB reader, say) without touching domain logic.
+ * One function per upstream endpoint. Nothing here interprets the data — the
+ * adapter reshapes it and the normalizers judge it. The contract for the sync
+ * endpoints is docs/SYNC_API.md.
  */
 
+/** The sync API accepts at most this many ids per `sync/events` call. */
+export const SYNC_EVENTS_BATCH_SIZE = 50;
+
+const api = () => `${config.upstreamBaseUrl}/api/v1`;
+
 export const sources = {
-	/** ~759 KB. */
-	players: () =>
-		fetchJson<RawPlayersResponse>(`${config.upstream.players}/getAllPlayers`),
-
-	/** ~228 KB. */
-	events: () =>
-		fetchJson<RawEventsResponse>(`${config.upstream.events}/getAllEvents`),
-
-	/** ~3.8 MB, uncompressed. The expensive one — do not poll this. */
-	results: () =>
-		fetchJson<RawResultsResponse>(`${config.upstream.results}/getAllResults`),
-
-	/** ~16 KB. Cheap enough to use as a freshness probe for rankings. */
-	manifest: () =>
-		fetchJson<RawManifestResponse>(`${config.upstream.points}/getManifest`),
-
-	/** ~682 KB. Current rankings/ratings for every series. */
-	latestPoints: () =>
-		fetchJson<RawPointsResponse>(`${config.upstream.points}/downloadLatestPointsData`),
+	/** Every finished event's hash, plus one hash for the player list. Small; polled every sync. */
+	syncManifest: () => fetchJson<SyncManifest>(`${api()}/sync/manifest`),
 
 	/**
-	 * ~96 KB. A single historical snapshot, by manifest key.
-	 * Note the response shape differs from `latestPoints` — see
-	 * `RawPointsSnapshotResponse`.
+	 * Full finished events, 1 to `SYNC_EVENTS_BATCH_SIZE` ids per call. Ids that are unknown or
+	 * no longer finished are left out of the answer, not reported as errors.
+	 */
+	syncEvents: async (ids: string[]) => {
+		if (ids.length === 0 || ids.length > SYNC_EVENTS_BATCH_SIZE) {
+			throw new RangeError(`sync/events takes 1 to ${SYNC_EVENTS_BATCH_SIZE} ids, got ${ids.length}`);
+		}
+		const query = ids.map(encodeURIComponent).join(',');
+		return fetchJson<SyncEventsResponse>(`${api()}/sync/events?ids=${query}`);
+	},
+
+	/** Every player, hidden ones included. Fetched only when the manifest's players hash moves. */
+	syncPlayers: () => fetchJson<SyncPlayersResponse>(`${api()}/sync/players`),
+
+	/** Every published ranking/rating snapshot. Small; polled every sync. */
+	pointsManifest: () => fetchJson<PointsManifestResponse>(`${api()}/points/getManifest`),
+
+	/**
+	 * One snapshot, by manifest key: a bare array for the one series the key
+	 * names. Used for each series' latest snapshot during a sync, and on demand
+	 * by `GET /snapshots/{key}`.
 	 */
 	pointsSnapshot: (key: string) =>
 		fetchJson<RawPointsSnapshotResponse>(
-			`${config.upstream.points}/downloadPointsData/${encodeURIComponent(key)}`
+			`${api()}/points/downloadPointsData/${encodeURIComponent(key)}`
 		),
 
 	/**
 	 * Player profile enrichment from fpa-profiles. Only called when
 	 * `PROFILES_URL` is set; see `config.profilesUrl`.
 	 */
-	profiles: () => fetchJson<RawProfilesExport>(`${config.profilesUrl}/export`),
-
-	/** 135 bytes. Which event, if any, is being judged right now. */
-	directory: () =>
-		fetchJson<RawDirectoryResponse>(`${config.upstream.judging}/getEventDirectory`),
-
-	/** 42 bytes. Version probe for a live event. */
-	eventDataVersion: (eventKey: string) =>
-		fetchJson<RawEventDataVersion>(
-			`${config.upstream.judging}/getEventDataVersion/${encodeURIComponent(eventKey)}`
-		),
-
-	/**
-	 * ~247 KB. The full judging blob for one event. Only ever fetched for
-	 * events the directory is showing, and only when the version probe says it
-	 * changed — we read nothing from it but the per-pool `isLocked` flags.
-	 */
-	eventData: (eventKey: string) =>
-		fetchJson<RawEventDataResponse>(
-			`${config.upstream.judging}/getEventData/${encodeURIComponent(eventKey)}`
-		)
+	profiles: () => fetchJson<RawProfilesExport>(`${config.profilesUrl}/export`)
 };

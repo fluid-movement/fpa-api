@@ -3,7 +3,7 @@
   "info": {
     "title": "FPA Results API",
     "version": "0.1.0",
-    "description": "Read-only API over the freestyle frisbee judging, results and rankings services.\n\nUpstream is five independent microservices, each with its own store and no shared query\nlayer. This API fetches all of them, resolves duplicate player identities, normalizes\ninconsistent division names, and joins ranking points back to the events that produced\nthem — then serves the result from an in-memory index.\n\n**Freshness.** Data is refreshed on a tiered schedule rather than per request, so responses\ncan be up to an hour behind upstream. `GET /health` reports exactly how stale the data is.\n\n**Data quality.** Upstream enforces no referential integrity. Records that reference a\nmissing player or event are kept and flagged (`unknown: true` on a team member, warnings\non `/health`) rather than dropped, so nothing disappears silently."
+    "description": "Read-only API over the freestyle frisbee judging, results and rankings services.\n\nUpstream is FullstackFreestyleTools (freestylejudge.com). This API keeps a mirror of its\nfinished events, players and rankings, resolves duplicate player identities, normalizes\ninconsistent division names, and joins ranking points back to the events that produced\nthem — then serves the result from an in-memory index.\n\n**Freshness.** Data is synced on a schedule rather than per request, so responses can be up\nto an hour behind upstream. `GET /health` reports exactly how stale the data is.\n\n**Data quality.** Upstream enforces no referential integrity. Records that reference a\nmissing player or event are kept and flagged (`unknown: true` on a team member, warnings\non `/health`) rather than dropped, so nothing disappears silently."
   },
   "tags": [
     {
@@ -98,7 +98,8 @@
             "type": [
               "number",
               "null"
-            ]
+            ],
+            "description": "Not provided by the current upstream; always null"
           },
           "fpaWebsiteId": {
             "type": [
@@ -192,7 +193,8 @@
             "type": [
               "number",
               "null"
-            ]
+            ],
+            "description": "Not provided by the current upstream; always null"
           },
           "rounds": {
             "type": "array",
@@ -355,7 +357,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "Canonical player GUID, shared across all upstream services"
+            "description": "Canonical player GUID, as used across upstream results and rankings"
           },
           "firstName": {
             "type": "string"
@@ -372,20 +374,6 @@
               "null"
             ],
             "description": "3-letter country code"
-          },
-          "gender": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Withheld unless EXPOSE_PERSONAL_FIELDS is enabled"
-          },
-          "membership": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "description": "Withheld unless EXPOSE_PERSONAL_FIELDS is enabled"
           },
           "fpaWebsiteId": {
             "type": [
@@ -412,13 +400,15 @@
             "type": [
               "number",
               "null"
-            ]
+            ],
+            "description": "Not provided by the current upstream; always null"
           },
           "lastActive": {
             "type": [
               "number",
               "null"
-            ]
+            ],
+            "description": "Not provided by the current upstream; always null"
           }
         },
         "required": [
@@ -427,8 +417,6 @@
           "lastName",
           "fullName",
           "country",
-          "gender",
-          "membership",
           "fpaWebsiteId",
           "fpaWebsiteIds",
           "aliasIds",
@@ -1237,7 +1225,8 @@
             "type": [
               "number",
               "null"
-            ]
+            ],
+            "description": "When the sync API was last read successfully"
           },
           "lastRefreshDurationMs": {
             "type": [
@@ -1265,7 +1254,51 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/SourceStatus"
             },
-            "description": "Per-upstream-service health"
+            "description": "Per-upstream-endpoint health: syncManifest, events, players, pointsManifest, points, profiles. events, players and points are only called when the manifests say something changed."
+          },
+          "sync": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "formatVersion": {
+                "type": "number"
+              },
+              "generatedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The sync manifest's generatedAt for the data served"
+              },
+              "events": {
+                "type": "number",
+                "description": "Finished events held"
+              },
+              "playersHash": {
+                "type": "string"
+              },
+              "pointsKeys": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Latest snapshot key per series behind the current standings"
+              },
+              "lastChanges": {
+                "$ref": "#/components/schemas/SyncChanges"
+              }
+            },
+            "required": [
+              "formatVersion",
+              "generatedAt",
+              "events",
+              "playersHash",
+              "pointsKeys",
+              "lastChanges"
+            ],
+            "description": "Mirror state; null until a sync has succeeded or a snapshot was restored"
           },
           "counts": {
             "type": [
@@ -1274,6 +1307,10 @@
             ],
             "properties": {
               "players": {
+                "type": "number",
+                "description": "Listed players (canonical, not hidden)"
+              },
+              "hiddenPlayers": {
                 "type": "number"
               },
               "events": {
@@ -1291,6 +1328,7 @@
             },
             "required": [
               "players",
+              "hiddenPlayers",
               "events",
               "results",
               "rankingSeries",
@@ -1313,6 +1351,7 @@
           "refreshing",
           "origin",
           "sources",
+          "sync",
           "counts",
           "warnings"
         ]
@@ -1344,6 +1383,59 @@
           "lastErrorAt",
           "lastError"
         ]
+      },
+      "SyncChanges": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "requests": {
+            "type": "number",
+            "description": "Upstream requests the sync made, manifests included"
+          },
+          "eventsFetched": {
+            "type": "number"
+          },
+          "eventsRemoved": {
+            "type": "number",
+            "description": "Stored events that left the sync manifest"
+          },
+          "eventsMissing": {
+            "type": "number",
+            "description": "Events requested but not returned: they stopped being finished mid-sync, and were dropped"
+          },
+          "playersFetched": {
+            "type": "boolean"
+          },
+          "pointsFetched": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Series whose latest snapshot was downloaded"
+          },
+          "pointsRemoved": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "at",
+          "requests",
+          "eventsFetched",
+          "eventsRemoved",
+          "eventsMissing",
+          "playersFetched",
+          "pointsFetched",
+          "pointsRemoved"
+        ],
+        "description": "What the last successful sync changed"
       },
       "RefreshResult": {
         "type": "object",
@@ -1640,7 +1732,7 @@
           "Players"
         ],
         "summary": "List players",
-        "description": "Only canonical players are listed. Upstream stores duplicate entries for the same person linked by `aliasKey`; those are merged here and their GUIDs appear in `aliasIds`.",
+        "description": "Only canonical players are listed. Upstream stores duplicate entries for the same person linked by an alias id; those are merged here and their GUIDs appear in `aliasIds`. Players hidden upstream are not listed or searchable, but results and placements still name them.",
         "parameters": [
           {
             "schema": {
@@ -2339,7 +2431,7 @@
           "Matching"
         ],
         "summary": "Find upstream players that may correspond to one of our users",
-        "description": "Results are suggestions ranked by similarity, never an automatic link. fpa-events and the upstream services share no identifier, so a confident-looking match can still be the wrong year or a junior division. Always require human confirmation before storing the id. Names are especially unreliable here — several people in the directory share a name.",
+        "description": "Results are suggestions ranked by similarity, never an automatic link. fpa-events and the upstream services share no identifier, so a confident-looking match can still be the wrong year or a junior division. Always require human confirmation before storing the id. Names are especially unreliable here — several people in the directory share a name. Players hidden upstream are never candidates.",
         "parameters": [
           {
             "schema": {
@@ -2424,8 +2516,8 @@
         "tags": [
           "Operations"
         ],
-        "summary": "Force an immediate full refresh",
-        "description": "Pulls the full corpus now instead of waiting for the scheduled refresh. Intended to be called right after results are entered upstream. Requires a bearer token matching REFRESH_TOKEN; when that variable is unset the route is disabled rather than left open.",
+        "summary": "Force an immediate sync",
+        "description": "Syncs from upstream now instead of waiting for the scheduled sync: reads both manifests and fetches whatever changed. Intended to be called right after results are entered upstream or a profile is saved. Requires a bearer token matching REFRESH_TOKEN; when that variable is unset the route is disabled rather than left open.",
         "security": [
           {
             "bearerAuth": []
@@ -2433,7 +2525,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Refresh completed",
+            "description": "Sync completed",
             "content": {
               "application/json": {
                 "schema": {
@@ -2453,7 +2545,7 @@
             }
           },
           "503": {
-            "description": "Refresh failed, or the endpoint is disabled",
+            "description": "Sync failed (the previous data is still served), or the endpoint is disabled",
             "content": {
               "application/json": {
                 "schema": {

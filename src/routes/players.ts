@@ -15,7 +15,8 @@ const listRoute = createRoute({
 	summary: 'List players',
 	description:
 		'Only canonical players are listed. Upstream stores duplicate entries for the same person ' +
-		'linked by `aliasKey`; those are merged here and their GUIDs appear in `aliasIds`.',
+		'linked by an alias id; those are merged here and their GUIDs appear in `aliasIds`. ' +
+		'Players hidden upstream are not listed or searchable, but results and placements still name them.',
 	request: { query: PlayerListQuery },
 	responses: {
 		200: {
@@ -32,7 +33,7 @@ players.openapi(listRoute, (c) => {
 	const index = store.requireIndex();
 	const { q, country, fpaWebsiteId, hasResults, limit, offset } = c.req.valid('query');
 
-	let items = [...index.players.values()];
+	let items = [...index.players.values()].filter((p) => !index.hiddenPlayerIds.has(p.id));
 
 	if (q) {
 		const needle = q.toLowerCase();

@@ -14,9 +14,9 @@ export class UpstreamError extends Error {
 /**
  * Fetch and parse JSON from an upstream service.
  *
- * Retries are deliberately conservative: these are Lambdas backed by an S3
- * cache, so a failure is usually a cold-start timeout that a single retry
- * clears, or a real outage that retrying will not fix. We do not hammer.
+ * Retries are deliberately conservative: a failure is usually a transient
+ * blip that a single retry clears, or a real outage that retrying will not
+ * fix. We do not hammer — the upstream rate-limits us like any other client.
  */
 export async function fetchJson<T>(url: string, attempts = 2): Promise<T> {
 	let lastError: unknown;
@@ -29,8 +29,13 @@ export async function fetchJson<T>(url: string, attempts = 2): Promise<T> {
 			});
 
 			if (!response.ok) {
+				// The sync and Points APIs answer errors with `{ error }`; keep it for /health.
+				const detail = await response
+					.json()
+					.then((body: { error?: unknown }) => (typeof body?.error === 'string' ? `: ${body.error}` : ''))
+					.catch(() => '');
 				throw new UpstreamError(
-					`Upstream returned ${response.status}`,
+					`Upstream returned ${response.status}${detail}`,
 					url,
 					response.status
 				);

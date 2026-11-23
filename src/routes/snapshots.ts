@@ -87,10 +87,10 @@ snapshots.openapi(detailRoute, async (c) => {
 		throw httpError(503, `Could not load snapshot "${key}" from upstream`);
 	}
 
-	// Reuse the same normalizer as the live standings, against the already-built
-	// results index, so a historical snapshot has an identical shape — points
-	// breakdown included. Only the points payload differs, and it arrives in a
-	// different shape from the live feed, hence snapshotToPoints.
+	// Reuse the same normalizer as the current standings, against the already-
+	// built results index, so a historical snapshot has an identical shape —
+	// points breakdown included. The payload is a bare array for the one series
+	// the key names, hence snapshotToPoints.
 	const { rankings, ratings } = buildPointsSeries(
 		snapshotToPoints(key, payload),
 		index.results,

@@ -1,29 +1,33 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
-import type { Corpus } from '../domain/index-builder.js';
+import type { SyncState } from './sync.js';
 
 /**
- * Last-good corpus persistence.
+ * Last-good sync state persistence.
  *
  * Without this, a restart during an upstream outage leaves us serving nothing.
- * With it, we boot from disk immediately and treat the network fetch as a
- * refresh rather than a hard dependency.
+ * With it, we boot from disk immediately and treat the network sync as a
+ * refresh rather than a hard dependency. It also carries the hashes the next
+ * sync compares against, so a restart does not cost a full resync.
  *
- * We store the RAW corpus, not the derived index: normalization logic changes
- * far more often than upstream data does, and a snapshot of derived output
- * would quietly serve yesterday's bugs after a deploy.
+ * We store the RAW sync payloads, not the derived index: normalization logic
+ * changes far more often than upstream data does, and a snapshot of derived
+ * output would quietly serve yesterday's bugs after a deploy.
+ *
+ * Version 1 held the old AWS services' corpus. It is ignored with a warning
+ * and replaced by a full sync.
  */
 
-const SNAPSHOT_VERSION = 1;
+const SNAPSHOT_VERSION = 2;
 
 interface SnapshotFile {
 	version: number;
-	corpus: Corpus;
+	state: SyncState;
 }
 
-export async function saveSnapshot(corpus: Corpus): Promise<void> {
-	const payload: SnapshotFile = { version: SNAPSHOT_VERSION, corpus };
+export async function saveSnapshot(state: SyncState): Promise<void> {
+	const payload: SnapshotFile = { version: SNAPSHOT_VERSION, state };
 	await mkdir(dirname(config.snapshotPath), { recursive: true });
 
 	// Write-then-rename: a crash mid-write must not leave a truncated snapshot
@@ -33,7 +37,7 @@ export async function saveSnapshot(corpus: Corpus): Promise<void> {
 	await rename(temp, config.snapshotPath);
 }
 
-export async function loadSnapshot(): Promise<Corpus | null> {
+export async function loadSnapshot(): Promise<SyncState | null> {
 	let raw: string;
 	try {
 		raw = await readFile(config.snapshotPath, 'utf8');
@@ -59,17 +63,19 @@ export async function loadSnapshot(): Promise<Corpus | null> {
 		return null;
 	}
 
-	const missing = CORPUS_SOURCES.filter((source) => !isObject(parsed.corpus?.[source]));
+	const state = parsed.state;
+	const missing = STATE_PARTS.filter((part) => !isObject(state?.[part]));
+	if (state && isObject(state.players) && !Array.isArray(state.players.players)) missing.push('players');
 	if (missing.length > 0) {
-		warnUnusable(`is missing corpus source(s): ${missing.join(', ')}`);
+		warnUnusable(`is missing sync state part(s): ${[...new Set(missing)].join(', ')}`);
 		return null;
 	}
 
-	return parsed.corpus!;
+	return state!;
 }
 
-/** The sources buildIndex reads unconditionally; the rest are optional. */
-const CORPUS_SOURCES = ['players', 'events', 'results', 'manifest', 'points'] as const;
+/** The parts a restored state cannot do without; profiles are optional. */
+const STATE_PARTS: Array<keyof SyncState> = ['events', 'players', 'pointsManifest', 'points'];
 
 function isObject(value: unknown): boolean {
 	return typeof value === 'object' && value !== null;

@@ -141,15 +141,6 @@ describe('buildPlayers', () => {
 		const { players } = buildPlayers({ a: { key: 'a' } });
 		expect(players.get('a')?.fullName).toBe('Unknown Player');
 	});
-
-	it('withholds personal fields by default', () => {
-		const { players } = buildPlayers({
-			a: { key: 'a', firstName: 'Ryan', lastName: 'Young', gender: 'M', membership: 42 }
-		});
-
-		expect(players.get('a')?.gender).toBeNull();
-		expect(players.get('a')?.membership).toBeNull();
-	});
 });
 
 describe('lookupPlayer', () => {

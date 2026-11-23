@@ -1,10 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import {
-	buildIndex,
-	snapshotToPoints,
-	summarizePoolLocks,
-	type Corpus
-} from './index-builder.js';
+import { describe, expect, it } from 'vitest';
+import { buildIndex, snapshotToPoints, type Corpus } from './index-builder.js';
 
 function corpus(overrides: Partial<Corpus> = {}): Corpus {
 	return {
@@ -49,7 +44,6 @@ function corpus(overrides: Partial<Corpus> = {}): Corpus {
 		},
 		manifest: {},
 		points: {},
-		directory: null,
 		...overrides
 	};
 }
@@ -266,146 +260,30 @@ describe('buildIndex', () => {
 		expect(index.snapshots[1]!.division).toBe('open');
 	});
 
-	// Events still being judged are withheld whole. The signal is per-pool
-	// `isLocked` from the judging service, NOT presence in the directory:
-	// upstream's `showInDirectory` is cleared by a manual admin call and in
-	// production stays true for weeks after an event has ended.
-	describe('in-progress events', () => {
-		const directory = {
-			eventDirectory: [{ eventKey: 'e1', eventName: 'Test Event', modifiedAt: 123 }]
-		};
-
-		const locks = (allPoolsLocked: boolean, unlockedCount: number) => ({
-			e1: { allPoolsLocked, poolCount: 4, unlockedCount, observedAt: 0 }
-		});
-
-		it('reports the event being judged as live', () => {
-			const index = buildIndex(corpus({ directory, liveLocks: locks(false, 2) }));
-
-			expect(index.live).toEqual({ eventId: 'e1', eventName: 'Test Event', modifiedAt: 123 });
-		});
-
-		it('does not report a finished event as live just because it is still directoried', () => {
-			const index = buildIndex(corpus({ directory, liveLocks: locks(true, 0) }));
-
-			expect(index.live).toBeNull();
-		});
-
-		it('consumes a directoried event once every pool is locked', () => {
-			const index = buildIndex(
-				corpus({ directory, liveLocks: locks(true, 0) })
-			);
-
-			expect(index.events.has('e1')).toBe(true);
-			expect(index.results.has('r1')).toBe(true);
-			expect(index.events.get('e1')!.resultCount).toBe(1);
-		});
-
-		it('withholds the event and its results while a pool is unlocked', () => {
-			const index = buildIndex(
-				corpus({ directory, liveLocks: locks(false, 2) })
-			);
-
-			expect(index.events.has('e1')).toBe(false);
-			expect(index.results.has('r1')).toBe(false);
-			expect(index.resultsByEvent.has('e1')).toBe(false);
-			expect(index.placementsByPlayer.get('p1') ?? []).toHaveLength(0);
-			expect(index.warnings).toContainEqual(
-				expect.stringContaining('is being judged — 2 of 4 pool(s) unlocked')
-			);
-		});
-
-		it('does not resurrect a withheld event as a synthesized stub', () => {
-			// The stub-synthesis pass walks resultsByEvent and invents an event
-			// for any id it does not recognise. Filtering the results first is
-			// what stops it handing the withheld event straight back.
-			const index = buildIndex(
-				corpus({ directory, liveLocks: locks(false, 1) })
-			);
-
-			expect(index.events.size).toBe(0);
-			expect(index.warnings).not.toContainEqual(
-				expect.stringContaining('missing from the event directory')
-			);
-		});
-
-		it('consumes a directoried event that has ended when lock state is unknown', () => {
-			// A judging-service outage must not drop a finished event's
-			// complete results. e1 ended 2026-05-03.
-			const index = buildIndex(corpus({ directory, liveLocks: undefined }));
-
-			expect(index.events.has('e1')).toBe(true);
-			expect(index.results.has('r1')).toBe(true);
-		});
-
-		it('withholds a directoried event that has not ended when lock state is unknown', () => {
-			const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-			const base = corpus({ directory });
-			base.events.allEventSummaryData!.e1!.endDate = future;
-
-			const index = buildIndex(base);
-
-			expect(index.events.has('e1')).toBe(false);
-			expect(index.warnings).toContainEqual(
-				expect.stringContaining('no observed pool lock state')
-			);
-		});
-
-		it('withholds a directoried event with no end date when lock state is unknown', () => {
-			const base = corpus({ directory });
-			delete base.events.allEventSummaryData!.e1!.endDate;
-
-			expect(buildIndex(base).events.has('e1')).toBe(false);
-		});
-
-		it('treats an event with no pools at all as still in progress', () => {
-			expect(
-				summarizePoolLocks({ eventData: { eventData: { poolMap: {} } } }).allPoolsLocked
-			).toBe(false);
-			expect(summarizePoolLocks({}).allPoolsLocked).toBe(false);
-		});
-
-		it('summarizes a mixed pool map', () => {
-			const summary = summarizePoolLocks({
-				eventData: {
-					eventData: {
-						poolMap: {
-							'pool|e1|Open Pairs|Finals|A': { isLocked: true },
-							'pool|e1|Open Pairs|Semifinals|A': { isLocked: false },
-							'pool|e1|Open Pairs|Semifinals|B': {}
-						}
+	it('tracks hidden players by the canonical record and keeps them in results', () => {
+		const index = buildIndex(
+			corpus({
+				players: {
+					players: {
+						p1: { key: 'p1', firstName: 'Ryan', lastName: 'Young' },
+						p2: { key: 'p2', firstName: 'James', lastName: 'Wiseman', hidden: true },
+						// A hidden duplicate does not hide the person it resolves to.
+						dupe: { key: 'dupe', firstName: 'ryan', lastName: 'young', aliasKey: 'p1', hidden: true }
 					}
 				}
-			});
+			})
+		);
 
-			expect(summary).toMatchObject({
-				allPoolsLocked: false,
-				poolCount: 3,
-				unlockedCount: 2
-			});
-		});
-
-		it('consumes in-progress events when the escape hatch is set', async () => {
-			vi.resetModules();
-			vi.stubEnv('CONSUME_IN_PROGRESS_EVENTS', 'true');
-			const { buildIndex: build } = await import('./index-builder.js');
-
-			const index = build(corpus({ directory, liveLocks: locks(false, 2) }));
-
-			expect(index.events.has('e1')).toBe(true);
-			expect(index.results.has('r1')).toBe(true);
-			// Still being judged, so still live — the flag only stops withholding.
-			expect(index.live?.eventId).toBe('e1');
-			expect(index.warnings.some((w) => w.includes('withheld'))).toBe(false);
-
-			vi.unstubAllEnvs();
-			vi.resetModules();
-		});
+		expect([...index.hiddenPlayerIds]).toEqual(['p2']);
+		expect(index.players.has('p2')).toBe(true);
+		const team = index.results.get('r1')!.rounds[0]!.pools[0]!.teams[0]!;
+		expect(team.players.map((m) => m.fullName)).toEqual(['Ryan Young', 'James Wiseman']);
+		expect(index.placementsByPlayer.get('p2')).toHaveLength(2);
 	});
 
-	it('normalizes a historical snapshot into the live points shape', () => {
+	it('normalizes a historical snapshot into the series-keyed points shape', () => {
 		// Regression: downloadPointsData returns a BARE ARRAY for the one series
-		// its key names, unlike downloadLatestPointsData which keys by series.
+		// its key names, unlike the series-keyed shape the index reads.
 		// Feeding the array straight in produced empty rankings and ratings.
 		const entries = [{ id: 'p1', fullName: 'Ryan Young', rank: 1, points: 100 }];
 
@@ -445,12 +323,11 @@ describe('buildIndex', () => {
 			events: {},
 			results: {},
 			manifest: {},
-			points: {},
-			directory: null
+			points: {}
 		});
 
 		expect(index.players.size).toBe(0);
 		expect(index.events.size).toBe(0);
-		expect(index.live).toBeNull();
+		expect(index.hiddenPlayerIds.size).toBe(0);
 	});
 });

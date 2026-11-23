@@ -80,7 +80,7 @@ const playerMatchRoute = createRoute({
 	path: '/players',
 	tags: ['Matching'],
 	summary: 'Find upstream players that may correspond to one of our users',
-	description: `${MATCH_NOTE} Names are especially unreliable here — several people in the directory share a name.`,
+	description: `${MATCH_NOTE} Names are especially unreliable here — several people in the directory share a name. Players hidden upstream are never candidates.`,
 	request: { query: MatchPlayerQuery },
 	responses: {
 		200: {
@@ -114,7 +114,8 @@ match.openapi(playerMatchRoute, (c) => {
 	const { name } = c.req.valid('query');
 
 	const ranked = rankCandidates(
-		[...index.players.values()],
+		// Hidden players are never offered as candidates.
+		[...index.players.values()].filter((p) => !index.hiddenPlayerIds.has(p.id)),
 		{ name },
 		{ name: (p) => p.fullName, startDate: () => null }
 	);

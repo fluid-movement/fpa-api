@@ -1,11 +1,101 @@
 /**
- * Shapes as they come off the wire from the upstream microservices.
+ * Two families of shapes live here.
  *
- * These are documented from observed production payloads, not from a contract —
- * upstream publishes no schema. Everything is therefore optional/defensive:
- * treat these as "what we hope to find", and let the normalizer decide what to
- * do when a field is missing. Never widen these into guarantees.
+ * `Sync*` and `Points*` are what comes off the wire from FullstackFreestyleTools: the sync API
+ * and the Points API, documented in docs/SYNC_API.md. They follow a contract, but stay
+ * optional/defensive at this boundary all the same.
+ *
+ * `Raw*` are the corpus types the domain normalizers read. They were the old AWS services' wire
+ * shapes; `adapter.ts` now produces them from the sync payloads, so the normalizers did not have
+ * to change. Treat them as "what we hope to find" and let the normalizer decide what to do when a
+ * field is missing.
  */
+
+// ── Sync API (`/api/v1/sync/*`) ─────────────────────────────────────────────
+
+/** `GET /api/v1/sync/manifest`. */
+export interface SyncManifest {
+	formatVersion?: number;
+	generatedAt?: string;
+	players?: { hash?: string; count?: number };
+	/** Event id -> opaque hash of that event's payload. Finished events only. */
+	events?: Record<string, string>;
+}
+
+export interface SyncTeam {
+	place?: number | null;
+	points?: number | null;
+	/** Raw player ids, possibly aliases; resolved through `SyncPlayer.aliasId`. */
+	playerIds?: string[];
+}
+
+export interface SyncPool {
+	/** Upper-case pool letter. */
+	pool?: string;
+	teams?: SyncTeam[];
+}
+
+export interface SyncRound {
+	/** 1 = Finals, 2 = Semifinals, … Not necessarily contiguous. */
+	number?: number;
+	pools?: SyncPool[];
+}
+
+export interface SyncDivision {
+	/** The same id rankings use as `resultsId`. */
+	id?: string;
+	name?: string;
+	rounds?: SyncRound[];
+}
+
+export interface SyncEvent {
+	id?: string;
+	name?: string;
+	startDate?: string | null;
+	endDate?: string | null;
+	fpaId?: string | number | null;
+	postName?: string | null;
+	divisions?: SyncDivision[];
+}
+
+/** `GET /api/v1/sync/events?ids=…`. */
+export interface SyncEventsResponse {
+	events?: SyncEvent[];
+}
+
+export interface SyncPlayer {
+	id?: string;
+	firstName?: string | null;
+	lastName?: string | null;
+	country?: string | null;
+	fpaWebsiteId?: string | number | null;
+	/** The entry this player duplicates. May chain, or dangle. */
+	aliasId?: string | null;
+	/** Hidden players are sent so line-ups stay whole; fpa-api decides what to show. */
+	hidden?: boolean;
+}
+
+/** `GET /api/v1/sync/players`. */
+export interface SyncPlayersResponse {
+	players?: SyncPlayer[];
+}
+
+// ── Points API (`/api/v1/points/*`) ─────────────────────────────────────────
+
+/**
+ * One `getManifest` entry. Like `RawManifestEntry`, except `createdAt` is not pinned down by the
+ * contract: accept epoch milliseconds or an ISO string, and let the adapter normalize it.
+ */
+export interface PointsManifestEntry extends Omit<RawManifestEntry, 'createdAt'> {
+	createdAt?: number | string;
+}
+
+/** `GET /api/v1/points/getManifest`. */
+export interface PointsManifestResponse {
+	manifest?: Record<string, PointsManifestEntry>;
+}
+
+// ── Corpus types read by the domain normalizers ─────────────────────────────
 
 /**
  * fpa-profiles' `GET /export`. Ours rather than upstream's, but just as
@@ -29,12 +119,11 @@ export interface RawPlayer {
 	firstName?: string;
 	lastName?: string;
 	country?: string;
-	/** 'M' | 'F' | 'X' in practice, but not enforced upstream. */
-	gender?: string;
-	membership?: number;
 	fpaWebsiteId?: string;
 	/** Points at the canonical player this entry duplicates. May chain, or dangle. */
 	aliasKey?: string;
+	/** Left out of player lists, search and matching; still named in results. */
+	hidden?: boolean;
 	createdAt?: number;
 	lastActive?: number;
 }
@@ -161,59 +250,20 @@ export interface RawRatingEntry {
 export type RawPointsEntry = RawRankingEntry | RawRatingEntry;
 
 /**
- * `downloadLatestPointsData` — `data` keyed by series name, e.g.
- * 'ranking-open' | 'ranking-women' | 'rating-open'.
+ * Current rankings and ratings, `data` keyed by series name, e.g.
+ * 'ranking-open' | 'ranking-women' | 'rating-open'. Assembled by the adapter from each series'
+ * latest snapshot (the shape of the old `downloadLatestPointsData`).
  */
 export interface RawPointsResponse {
 	data?: Record<string, RawPointsEntry[]>;
 }
 
 /**
- * `downloadPointsData/{key}` — a DIFFERENT shape from the latest-points
- * endpoint despite the shared `data` envelope: a bare array of entries for the
- * one series the key names, with no series keying. The series has to be
- * recovered from the snapshot key itself.
+ * `downloadPointsData/{key}` — a DIFFERENT shape from `RawPointsResponse`
+ * despite the shared `data` envelope: a bare array of entries for the one
+ * series the key names, with no series keying. The series has to be recovered
+ * from the snapshot key itself.
  */
 export interface RawPointsSnapshotResponse {
 	data?: RawPointsEntry[] | Record<string, RawPointsEntry[]>;
-}
-
-export interface RawDirectoryEntry {
-	eventKey?: string;
-	eventName?: string;
-	modifiedAt?: number;
-}
-
-export interface RawDirectoryResponse {
-	eventDirectory?: RawDirectoryEntry[];
-}
-
-export interface RawEventDataVersion {
-	importantVersion?: number;
-	minorVersion?: number;
-}
-
-/**
- * One pool inside a judging event. The head judge sets `isLocked` when that
- * pool's scoring is final, which is the only upstream signal for "this event
- * has finished". Presence in `getEventDirectory` is not: `showInDirectory` is
- * cleared by a manual admin call and routinely stays true for weeks after an
- * event ends.
- */
-export interface RawJudgingPool {
-	isLocked?: boolean;
-}
-
-/**
- * `getEventData/{key}` — ~247 KB of judge scoring, of which we read only the
- * lock bits. The doubled `eventData.eventData` nesting is upstream's, not a
- * typo.
- */
-export interface RawEventDataResponse {
-	eventData?: {
-		key?: string;
-		eventData?: {
-			poolMap?: Record<string, RawJudgingPool>;
-		};
-	};
 }
